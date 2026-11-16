@@ -1,0 +1,20 @@
+# ==============================================================================
+# STRICT PRIVATE SECURITY BOUNDARY (NEVER PUSHED TO PUBLIC GITHUB)
+# ==============================================================================
+private/
+private/**
+Keys.md
+*.key
+*.token
+*.env
+
+# ==============================================================================
+# OBSIDIAN RUNTIME, PLUGIN CACHES & MOBILE LAYOUT ARTIFACTS
+# ==============================================================================
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache/
+.obsidian/plugins/*/data.json.bak
+.obsidian/plugins/**/data.json
+.trash/
+.copilot/
