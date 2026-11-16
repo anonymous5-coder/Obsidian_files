@@ -109,4 +109,22 @@ In the next pass, we can shorten `GIT_SYNC_ARCHITECTURE_PROPOSAL.md` from a theo
 Zero code. Zero scripts. Straight execution.
 
 ---
-*Report updated and certified. Ready for user instruction on the plan file revision.*
+
+## 5. GitSync Companion: Hybrid Architecture & Proposal Summary
+
+### 5.1 Project Identity & Core Concept
+* **Full Specification:** See dedicated project blueprint at [GIT_SYNC_COMPANION_PROPOSAL.md](file:///storage/emulated/0/Documents/Obsidian/GIT_SYNC_COMPANION_PROPOSAL.md).
+* **Plugin Name:** `GitSync Companion` (ID: `git-sync-companion`)
+* **Core Philosophy:** Solves Obsidian Git's 1-minute mobile debounce limit and navigation friction through a dual-engine architecture:
+  1. **Lifecycle Engine:** Automatically triggers Git sync on app exit, app switch, or lock screen via `visibilitychange` & `pagehide`.
+  2. **Interactive UI Engine:** Adds a 1-tap draggable Floating Action Button (FAB) with live dirty-state visual indicators (Idle $\to$ Dirty $\to$ Syncing $\to$ Success).
+
+### 5.2 Technical Audit of Android System Notifications
+* Inspection of `md.obsidian` manifest via ADB confirmed that `POST_NOTIFICATIONS` is **not** declared in the Obsidian Android APK.
+* Therefore, a pure JavaScript Obsidian plugin cannot directly post system notifications in Android's notification drawer.
+* **Hybrid Resolution:**
+  - **In-App:** Draggable Floating Action Button (FAB) and interactive banner.
+  - **System-Level:** Complementary Termux notification bridge for users wanting a permanent Android notification tile.
+
+---
+*Report updated and certified with GitSync Companion architecture proposal.*
