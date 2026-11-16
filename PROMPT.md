@@ -1,1 +1,3 @@
 I am thinking for hybrid idea. Which combines both option A(companion plugin for immediate/accidental swipe or exit. which triggers sequential sync processes, same as native trigger of 1 minute debounce) and an implied part of ideation of option C to option A.(i.e. sync button on notification or something like that(you propose the idea). Instead of swipe down ribbon action(command palette). This hybrid feature in companion plugin.
+Plugin name: GitSync Companion (or suggest better name)
+Description: companion plugin of (_name_) plugin. Auto sync on exit with the same manual sync button.
