@@ -179,5 +179,3 @@ Execution is divided into 4 straightforward, sequential phases:
    * Verify the commit appears online.
    * Verify that `Keys.md` and `private/` are completely absent from GitHub.
 
----
-*Plan approved and ready for execution. Awaiting confirmation to run Phase 1.*
