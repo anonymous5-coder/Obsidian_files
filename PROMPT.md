@@ -4,7 +4,7 @@
       • Step 714: The user input (Go ahead).
       • Steps 715–728: Every agent turn, verbatim model thoughts (UI Thinking Blocks), tool invocation cards (read_file, run_command, write_file) with full file paths and complete code contents, and tool execution outputs.
       • Step 729: The exact termination error block (HTTP 503 UNAVAILABLE: MODEL_CAPACITY_EXHAUSTED).
-  2. /storage/emulated/0/Documents/Obsidian/agy_ui_work_data_steps_714
+  2. ./storage/emulated/0/Documents/Obsidian/agy_ui_work_data_steps_714
   _729.json
   Contains the underlying raw structured JSON records for all 16
   steps (714–729).
