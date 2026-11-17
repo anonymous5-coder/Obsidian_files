@@ -33,7 +33,7 @@
   transform: scale(0.92);
 }
 
-/* Dimmed when clean and idle */
+/* 1. Idle & Synced */
 .gitsync-fab-idle {
   opacity: 0.55;
 }
@@ -42,14 +42,14 @@
   opacity: 0.85;
 }
 
-/* Vault Dirty (Uncommitted changes exist) */
+/* 2. Dirty: Unsaved edits in vault (Orange Badge) */
 .gitsync-fab-dirty {
   opacity: 1.0 !important;
-  border-color: var(--interactive-accent, #7057ff);
-  box-shadow: 0 4px 16px rgba(112, 87, 255, 0.35);
+  border-color: var(--color-orange, #ff9800);
+  box-shadow: 0 4px 16px rgba(255, 152, 0, 0.35);
 }
 
-.gitsync-fab-badge {
+.gitsync-fab-badge-orange {
   position: absolute;
   top: 3px;
   right: 3px;
@@ -58,15 +58,37 @@
   border-radius: 50%;
   background-color: var(--color-orange, #ff9800);
   border: 2px solid var(--background-secondary, #202020);
-  box-shadow: 0 0 6px rgba(255, 152, 0, 0.8);
+  box-shadow: 0 0 6px rgba(255, 152, 0, 0.85);
   animation: gitsync-pulse 1.8s infinite;
   pointer-events: none;
 }
 
-/* Sync in Progress */
+/* 3. Committed Locally: Saved to local Git, safe to exit (Blue Badge) */
+.gitsync-fab-committed {
+  opacity: 1.0 !important;
+  border-color: var(--color-blue, #2196f3);
+  box-shadow: 0 4px 16px rgba(33, 150, 243, 0.35);
+}
+
+.gitsync-fab-badge-blue {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--color-blue, #2196f3);
+  border: 2px solid var(--background-secondary, #202020);
+  box-shadow: 0 0 6px rgba(33, 150, 243, 0.85);
+  animation: gitsync-pulse 2.2s infinite;
+  pointer-events: none;
+}
+
+/* 4. Sync in Progress (Spinning) */
 .gitsync-fab-syncing {
   opacity: 1.0 !important;
   border-color: var(--interactive-accent, #7057ff);
+  box-shadow: 0 4px 16px rgba(112, 87, 255, 0.35);
 }
 
 .gitsync-fab-syncing svg {
@@ -74,7 +96,7 @@
   color: var(--interactive-accent, #7057ff);
 }
 
-/* Sync Succeeded */
+/* 5. Sync Succeeded (Green Checkmark) */
 .gitsync-fab-success {
   opacity: 1.0 !important;
   border-color: var(--color-green, #43a047) !important;
@@ -82,23 +104,13 @@
   color: var(--color-green, #43a047) !important;
 }
 
-/* Animations */
+/* Keyframes */
 @keyframes gitsync-spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 @keyframes gitsync-pulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.35);
-    opacity: 0.7;
-  }
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.7; }
 }
