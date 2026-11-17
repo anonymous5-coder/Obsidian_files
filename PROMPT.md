@@ -6,3 +6,5 @@ Now I want to check the contradiction ,overlaps, issues and flaws between :
 
 Subjects for checking includes: architecture, workflow, features and functionalities, Documentation, Companionship.
 
+>One user side raised overlap suspicion:
+>
