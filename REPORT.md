@@ -137,4 +137,122 @@ Zero code. Zero scripts. Straight execution.
   3. **Termux Unkillable Daemon (Tier 2):** Runs independently in Termux to handle continuous background syncing immune to Obsidian app swipe-out.
 
 ---
-*Report updated and certified with GitSync Companion architecture proposal and live verification findings.*
+
+## 6. Critical Architectural, Workflow & Parity Audit of `GIT_SYNC_COMPANION_PROPOSAL.md`
+
+> **Audit Date:** November 17, 2026  
+> **Auditor:** Antigravity (Systems Architect)  
+> **Target Document:** [`GIT_SYNC_COMPANION_PROPOSAL.md`](file:///storage/emulated/0/Documents/Obsidian/GIT_SYNC_COMPANION_PROPOSAL.md) (159 lines)  
+> **Reference Implementations:**
+> * Live Vault Prototype: [`.obsidian/plugins/git-sync-companion/`](file:///storage/emulated/0/Documents/Obsidian/.obsidian/plugins/git-sync-companion/) (`main.js`, `styles.css`, `manifest.json`)
+> * Standalone TypeScript Source: [`~/projects/git-sync-companion/`](file:///data/data/com.termux/files/home/projects/git-sync-companion/) (`src/main.ts`, `src/settings.ts`, `src/types.ts`)
+
+---
+
+### 6.1 Executive Audit Scorecard
+
+| Dimension | Rating | Summary Verdict |
+| :--- | :---: | :--- |
+| **Architectural Soundness** | **9 / 10** | The core design (Fast Local Pre-Commit + Boot-Recovery + Exit Trigger + FAB) correctly solves the `SIGKILL` limitation without requiring root or external dependencies. |
+| **Live Implementation Parity** | **9.5 / 10** | Live code in both the vault and `~/projects/` matches the functional goals. Touch dragging, state transitions, and background execution are fully operational. |
+| **Document Completeness** | **7 / 10** | Several essential technical sections (Source Tree breakdown, Orientation clamping, and Architecture Decision Records) were accidentally dropped during the last revision. |
+| **Internal Consistency** | **7.5 / 10** | Noticeable temporal contradictions exist in Sections 5 and 6, describing completed features as "future targets." |
+
+---
+
+### 6.2 Detailed Findings: Flaws, Contradictions, and Overlaps
+
+#### Finding 1: Structural Omissions (Dropped Source Tree & ADRs)
+* **The Issue:** When `GIT_SYNC_COMPANION_PROPOSAL.md` was expanded with the `SIGKILL` deep-dive in Section 3, the previous **Section 4 ("Source Tree & Modular Design")** and **Section 6 ("Architecture Decision Records")** were inadvertently omitted.
+* **Impact:** A developer or reviewer reading the proposal cannot see the modular file decomposition (`src/main.ts`, `src/settings.ts`, `src/types.ts`, `esbuild.config.mjs`) or the rationale behind design choices (ADR 1: Companion vs. Fork; ADR 2: Command API vs. Direct isomorphic-git binding).
+* **Fix Required:** Re-insert the full project directory tree and ADRs into the proposal.
+
+---
+
+#### Finding 2: Temporal Inconsistency / Stale Status in Sections 5 & 6
+* **The Issue:** 
+  * Section 5 lists *Fast Local Pre-Commit* and *Boot-Time Auto-Recovery* as "Production Release Targets" under "Current Prototype Status: Interrupted by SIGKILL."
+  * Section 6 lists *Step 1: Incorporate Fast Local Pre-Commit & Boot Recovery into the prototype* as future work.
+* **The Reality:** Both features have already been coded, deployed, physically verified on Android, and confirmed working by the user.
+* **Impact:** The document misrepresents the current progress of the project, confusing the historical record.
+* **Fix Required:** Update Sections 5 and 6 to certify that Fast Pre-Commit and Boot Recovery are **completed and verified in the live prototype**.
+
+---
+
+#### Finding 3: Command ID Overlap and Semantic Ambiguity
+* **The Issue:** The proposal repeatedly refers to `obsidian-git:push` as the primary execution target. In `Vinzent03/obsidian-git`, the commands have distinct semantics:
+  1. `obsidian-git:commit` $\to$ Runs local commit only (`gitActions.commit({ fromAuto: true, mode: "all" })`). Takes ~30ms, no network.
+  2. `obsidian-git:push2` $\to$ Runs remote push only (`gitActions.push()`). Network required.
+  3. `obsidian-git:push` $\to$ Runs **full Commit-and-Sync** (`gitActions.commitAndSync()`).
+* **The Flaw:** When the proposal discusses "Fast Local Pre-Commit," it must explicitly reference `obsidian-git:commit`, NOT `obsidian-git:push`. Mixing these up leads to accidental network pushes when only a local disk commit was intended.
+* **Fix Required:** Clarify the exact command mapping table in Section 4.1.
+
+---
+
+#### Finding 4: Timer Redundancy Between GitSync and Obsidian Git
+* **The Issue (Workflow Overlap):**
+  * In Obsidian Git: `autoBackupAfterFileChange = true` and `autoSaveInterval = 1` (60s timer).
+  * In GitSync Companion: `localPreCommitSeconds = 6` (6s timer) $\to$ triggers `obsidian-git:commit` $\to$ triggers `obsidian-git:push2`.
+* **The Workflow Behavior:**
+  1. At $t=0\text{s}$: Note is modified.
+  2. At $t=6\text{s}$: GitSync Companion commits locally and pushes.
+  3. At $t=60\text{s}$: Obsidian Git's native timer fires. It checks status, finds nothing to commit, but still runs a redundant `pullBeforePush` and `fetch()`.
+* **Architectural Guidance Needed:** While Obsidian Git safely handles empty commits (`status: "nothing-to-commit"`), running redundant network checks burns battery. The proposal must clearly advise:
+  * **Option A (Recommended):** Set Obsidian Git's `autoSaveInterval = 0` (disabled) and let GitSync Companion handle 100% of debounce and exit syncs.
+  * **Option B (Safe Fallback):** Keep Obsidian Git's interval at 1–5 minutes as a passive safety net.
+
+---
+
+#### Finding 5: Optimistic State Transition Risk (Enqueue vs. Execution)
+* **The Flaw:** In `GitSync Companion`, `triggerLocalPreCommit()` calls `executeCommandById("obsidian-git:commit")` and immediately sets `this.isDirty = false; this.isCommittedLocally = true;`.
+* **The Problem:** `executeCommandById` is synchronous; it returns `true` as soon as the task is *placed in Obsidian Git's Promise Queue*, NOT when the commit actually writes to disk.
+* **Risk:** If Git fails (e.g., repository index locked or merge conflict), the companion will display the 🔵 Blue "Committed" badge even though the commit failed!
+* **Architectural Fix:** GitSync Companion should listen for `obsidian-git:head-change` or `obsidian-git:refs-changed` to transition to the Blue state, rather than assuming immediate success.
+
+---
+
+#### Finding 6: Viewport & Screen Orientation Clamping Gap
+* **The Issue:** `data.json` records physical coordinates: `{ bottom: 567, right: 10 }`.
+* **The Flaw:** If a user rotates their Android device from Portrait (height ~900px) to Landscape (height ~400px), a `bottom: 567px` button will be rendered completely off-screen above the visible viewport!
+* **Fix Required:** Add a `window.addEventListener("resize")` handler that dynamically clamps `bottom` to `Math.min(window.innerHeight - 60, bottom)`.
+
+---
+
+#### Finding 7: Overemphasis on Tier-2 (Termux Daemon) Relative to User Scope
+* **The Issue:** The user explicitly noted: *"I want to skip task 2."*
+* **The Flaw:** Sections 1.2, 3 (diagram), and 4.4 elevate the Termux background daemon to an equal "Tier 2" citizen in the product architecture.
+* **The Correction:** `GitSync Companion` is primarily a **universal, platform-independent Obsidian Community Plugin** (Android, iOS, Windows, Mac, Linux). The Termux daemon is merely an optional external power-user workaround on Android.
+* **Fix Required:** Reframe Tier 2 as an "Appendix / Advanced Android Fallback," centering the document on the standalone plugin.
+
+---
+
+### 6.3 Proposal vs. Live Implementation Parity Matrix
+
+| Feature / Component | Specified in Proposal | Implemented in Live Code | Parity Status |
+| :--- | :---: | :---: | :---: |
+| **Draggable Floating Action Button (FAB)** | Yes (Sec 3.2.A) | Yes (`main.js:213–290`) | **100% Parity** |
+| **Touch drag threshold (8px) & tap trigger** | Yes (Sec 3.2.A) | Yes (`main.js:241–266`) | **100% Parity** |
+| **4-State Visual Indicators (Orange/Blue/Spin/Green)** | Yes (Sec 4.3) | Yes (`styles.css:41–90`) | **100% Parity** |
+| **Fast Local Pre-Commit (6s)** | Yes (Sec 4.1) | Yes (`main.js:93–140`) | **100% Parity** |
+| **Boot-Time Auto-Recovery Engine** | Yes (Sec 4.2) | Yes (`main.js:180–205`) | **100% Parity** |
+| **Exit Trigger on `visibilitychange`** | Yes (Sec 3.1) | Yes (`main.js:58–66`) | **100% Parity** |
+| **Haptic Feedback on Sync** | Yes (Sec 3.2.A) | Yes (`main.js:148–152`) | **100% Parity** |
+| **Position Persistence in `data.json`** | Yes (Sec 3.2.A) | Verified live (`bottom: 567`) | **100% Parity** |
+| **Modular TypeScript Sources in `~/projects/`** | Mentioned in Sec 4 | Complete (`src/*.ts`) | **100% Parity** |
+| **Automated GitHub Release CI/CD** | Mentioned in Sec 5 | Yes (`release.yml`) | **100% Parity** |
+
+---
+
+### 6.4 Recommended Action Plan for `GIT_SYNC_COMPANION_PROPOSAL.md`
+
+Once you instruct me to modify `GIT_SYNC_COMPANION_PROPOSAL.md`, we will execute the following surgical improvements:
+
+1. **Restore Section 5: Modular Source Tree & Build Architecture** (detail `src/main.ts`, `src/settings.ts`, `src/types.ts`, `esbuild.config.mjs`, `release.yml`).
+2. **Restore Section 7: Architecture Decision Records (ADRs)** (ADR 1: Companion vs. Fork; ADR 2: Public Command API delegation).
+3. **Update Status in Section 6 & 8:** Mark Fast Local Pre-Commit, 4-state visual cues, and Boot-Recovery as **Completed & Verified Live**.
+4. **Clarify Command API Mapping Table:** Explicitly delineate `obsidian-git:commit` (local-only) vs `obsidian-git:push2` (remote-only) vs `obsidian-git:push` (commit-and-sync).
+5. **Add Screen Orientation & Viewport Clamp Specification** in the FAB touch architecture.
+6. **Reframe Termux Daemon as an Appendix:** Demote Tier 2 to an optional advanced appendix to keep the proposal 100% focused on the universal community plugin.
+
+---
+*Audit completed and certified. Zero files modified outside `REPORT.md`.*
