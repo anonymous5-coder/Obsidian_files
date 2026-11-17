@@ -1,1 +1,1 @@
-Second pass: I would like you to check again for
+Second pass: I would like you to check all those things again for double surity and parity as well.
