@@ -2,8 +2,7 @@
 
   1. /storage/emulated/0/Documents/Obsidian/AGY_UI_WORK_PRESENTATION.md Contains the complete, verbatim presentation as rendered on the agy-termux UI:
       • Step 714: The user input (Go ahead).
-      • Steps 715–728: Every agent turn, verbatim model thoughts (UI Thinking Blocks), tool invocation cards (read_file, run_command, write_file) with full file paths and complete
-      code contents, and tool execution outputs.
+      • Steps 715–728: Every agent turn, verbatim model thoughts (UI Thinking Blocks), tool invocation cards (read_file, run_command, write_file) with full file paths and complete code contents, and tool execution outputs.
       • Step 729: The exact termination error block (HTTP 503
       UNAVAILABLE: MODEL_CAPACITY_EXHAUSTED).
   2.
