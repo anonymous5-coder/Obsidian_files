@@ -126,5 +126,15 @@ Zero code. Zero scripts. Straight execution.
   - **In-App:** Draggable Floating Action Button (FAB) and interactive banner.
   - **System-Level:** Complementary Termux notification bridge for users wanting a permanent Android notification tile.
 
+### 5.3 Physical Testing Results & Force-Kill Architecture
+* **Verified Working:**
+  1. Floating Action Button (FAB) rendered on mobile, supports touch dragging with position saving, haptic feedback, and 1-tap manual sync execution.
+  2. App switching and minimizing to background (`visibilitychange`) successfully triggered automated commit and push.
+* **The Sudden Swipe-Out Gap:** Swiping the app card away in Android's App Switcher triggers an immediate kernel `SIGKILL (signal 9)`. A Git network push over HTTPS takes 1.5–4.0s, so terminating the app within 300ms severs the network socket.
+* **Proposal & Solution Implemented in Spec:**
+  1. **Fast Local Pre-Commit (5–8s):** Commits to local Git database in 30ms before exit occurs.
+  2. **Boot-Time Auto-Recovery Engine:** Automatically detects unpushed commits on the next app startup and pushes them to GitHub immediately.
+  3. **Termux Unkillable Daemon (Tier 2):** Runs independently in Termux to handle continuous background syncing immune to Obsidian app swipe-out.
+
 ---
-*Report updated and certified with GitSync Companion architecture proposal.*
+*Report updated and certified with GitSync Companion architecture proposal and live verification findings.*
