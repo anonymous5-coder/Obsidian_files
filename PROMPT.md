@@ -1,2 +1,2 @@
 
-Now I want to check the contradiction and overlaps between Git plugin setup ()
+Now I want to check the contradiction and overlaps between Git plugin setup (not pdocumentation: )
