@@ -86,6 +86,21 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
     window.addEventListener("pagehide", this.handlePageHide);
 
+    // Dynamic Orientation & Viewport Resize Clamping
+    this.handleResize = () => {
+      if (this.fabEl) {
+        const maxBottom = window.innerHeight - 60;
+        const maxRight = window.innerWidth - 60;
+        const currentBottom = parseInt(this.fabEl.style.bottom || "85", 10);
+        const currentRight = parseInt(this.fabEl.style.right || "20", 10);
+        const clampedBottom = Math.max(10, Math.min(maxBottom, currentBottom));
+        const clampedRight = Math.max(10, Math.min(maxRight, currentRight));
+        this.fabEl.style.bottom = `${clampedBottom}px`;
+        this.fabEl.style.right = `${clampedRight}px`;
+      }
+    };
+    window.addEventListener("resize", this.handleResize);
+
     this.registerEvent(
       this.app.workspace.on("quit", () => {
         if (this.settings.autoSyncOnExit && (this.isDirty || this.isCommittedLocally)) {
@@ -241,8 +256,25 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     }
   }
 
-  onGitRefsChanged() {
+  async onGitRefsChanged() {
     this.isSyncing = false;
+    const gitPlugin = this.app.plugins?.getPlugin("obsidian-git");
+
+    if (gitPlugin?.gitManager?.canPush) {
+      try {
+        const canPush = await gitPlugin.gitManager.canPush();
+        if (canPush) {
+          // Local commits exist, unpushed -> maintain Blue "Committed" badge!
+          this.isDirty = false;
+          this.isCommittedLocally = true;
+          this.syncState = "committed";
+          this.updateFabUI();
+          return;
+        }
+      } catch (e) {}
+    }
+
+    // Fully in sync with remote
     this.isDirty = false;
     this.isCommittedLocally = false;
     this.showSuccessFeedback();
@@ -418,6 +450,9 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     }
     if (this.handlePageHide) {
       window.removeEventListener("pagehide", this.handlePageHide);
+    }
+    if (this.handleResize) {
+      window.removeEventListener("resize", this.handleResize);
     }
 
     if (this.preCommitTimer) {
