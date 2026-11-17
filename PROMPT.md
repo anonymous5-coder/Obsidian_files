@@ -1,1 +1,1 @@
-Previously, while you were working wi
+Previously, while you agy-termux(you) were working with the project in previous session. It accidentally terminated and stopped because of too many request and traffic issue on your side. To let that session know that where it stopped , and from where to continue by retaining last 
