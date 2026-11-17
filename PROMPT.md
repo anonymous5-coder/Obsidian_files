@@ -2,6 +2,6 @@
 Now I want to check the contradiction ,overlaps, issues and flaws between :
 
 - Git plugin setup (no checking for plug-in it self actually) ; documentation: GIT_SYNC_ARCHITECTURE_PROPOSAL ) and
-- GitSync Companion (plugin project itself, documentation: GIT_SYNC_COMPANION_PROPOSAL).
+- GitSync Companion (plugin project itself) ; documentation: GIT_SYNC_COMPANION_PROPOSAL).
 
 Subjects for checking includes: architecture, workflow, features and functionalities, Documentation, Companionship.
