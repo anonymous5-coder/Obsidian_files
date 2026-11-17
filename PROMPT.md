@@ -4,4 +4,4 @@ Actually, I want to check this file before parity checking, for any architectura
 
 Give your response and report in the existing file "REPORT"  , by appending at convinient section.
 
-Dont modify any file yet
+Dont modify any file yet, except "REPORT" file.
