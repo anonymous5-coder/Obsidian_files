@@ -2,4 +2,4 @@ I would like to check  the file GIT_SYNC_COMPANION_PROPOSAL for completeness,ali
 
 Actually, I want to check this file before parity checking, for any architectural or workflow flaw, contradiction, overlap etc. 
 
-Give your response and report in the existing file REPORT , by appending at convinient section.
+Give your response and report in the existing file "REPORT"  , by appending at convinient section.
