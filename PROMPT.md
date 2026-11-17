@@ -1,1 +1,1 @@
-I would like to check the parity with 
+I would like to check the parity with GIT_SYNC_COMPANION_PROPOSAL
