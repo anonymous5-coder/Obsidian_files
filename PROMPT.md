@@ -5,3 +5,4 @@ Now I want to check the contradiction ,overlaps, issues and flaws between :
 - GitSync Companion (plugin project itself) ; documentation: GIT_SYNC_COMPANION_PROPOSAL).
 
 Subjects for checking includes: architecture, workflow, features and functionalities, Documentation, Companionship.
+
