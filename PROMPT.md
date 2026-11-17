@@ -5,8 +5,7 @@
   files:
 
   1.
-  /storage/emulated/0/Documents/Obsidian/AGY_UI_WORK_PRESENTATION.m
-  d
+  /storage/emulated/0/Documents/Obsidian/AGY_UI_WORK_PRESENTATION.md
   Contains the complete, verbatim presentation as rendered on the
   agy-termux UI:
       • Step 714: The user input (Go ahead).
