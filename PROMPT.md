@@ -1,3 +1,3 @@
 I would like to check the parity with GIT_SYNC_COMPANION_PROPOSAL first. I want to skip task 2. And we will do task 1 later in the future.
 
-Actually, I want to check this fi
+Actually, I want to check this file for any , 
