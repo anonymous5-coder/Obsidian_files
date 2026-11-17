@@ -2,4 +2,4 @@ I would like to check the parity with GIT_SYNC_COMPANION_PROPOSAL first. I want 
 
 Actually, I want to check this file for any architectural or workflow flaw, contradiction, overlap etc. 
 
-Give your response and report in the existing file REPORT , by appe
+Give your response and report in the existing file REPORT , by appending at convinient section.
