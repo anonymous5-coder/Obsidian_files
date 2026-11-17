@@ -7,4 +7,4 @@ Now I want to check the contradiction ,overlaps, issues and flaws between :
 Subjects for checking includes: architecture, workflow, features and functionalities, Documentation, Companionship.
 
 >One user side raised overlap suspicion:
->autoPullOnBoot may trigger at start of app. But companion plugin also triggers that same debounce's action at start. By this extra que may sent by doubling the pull request. (If above reasoned behaviour is true , then user can easily toggle autoPullOnBoot to false in plugin setting of Git Plugin.). If this suspicion and reasonings are true , then 
+>autoPullOnBoot may trigger at start of app. But companion plugin also triggers that same debounce's action at start. By this extra que may sent by doubling the pull request. (If above reasoned behaviour is true , then user can easily toggle autoPullOnBoot to false in plugin setting of Git Plugin.). But it
