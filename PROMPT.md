@@ -1,1 +1,1 @@
-Ready. Go ah
+Ready. Go ahead.
