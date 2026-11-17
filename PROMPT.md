@@ -7,4 +7,4 @@ Now I want to check the contradiction ,overlaps, issues and flaws between :
 Subjects for checking includes: architecture, workflow, features and functionalities, Documentation, Companionship.
 
 >One user side raised overlap suspicion:
->autoPullOnBoot may trigger at start of app. But companion plugin also triggers 
+>autoPullOnBoot may trigger at start of app. But companion plugin also triggers that same debounce event at start. 
