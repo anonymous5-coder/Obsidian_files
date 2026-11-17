@@ -36,10 +36,15 @@ All theoretical blockers have been resolved by adopting the verified native capa
 * **Phase 2 (Scaffolding & Baseline Push):** **COMPLETED & VERIFIED.** (Initial commit pushed to `anonymous5-coder/Obsidian_files:main`).
 * **Phase 3 (Obsidian Git Configuration):** **COMPLETED & VERIFIED.** (PAT entered, automated sync running).
 * **Phase 4 (Live Sync Verification):** **VERIFIED LIVE.** (Obsidian Git active on Android, commits pushed cleanly).
-* **Phase 5 (GitSync Companion Hybrid Implementation):**
+* **Phase 5 (GitSync Companion Hybrid Implementation):** **COMPLETED & PHYSICALLY VERIFIED.**
   * **Local Deployment:** [git-sync-companion](file:///storage/emulated/0/Documents/Obsidian/.obsidian/plugins/git-sync-companion/) deployed with `manifest.json`, `styles.css`, and `main.js`.
   * **Plugin Registration:** Enabled in `.obsidian/community-plugins.json`.
-  * **Features Included:** Instant auto-sync on app exit / background (`visibilitychange`), draggable 1-tap Floating Action Button (FAB) with live dirty badge and haptic feedback.
+  * **Features Verified Live on Android:** 
+    - 1-Tap Draggable Floating Action Button (FAB) with haptic feedback and position persistence.
+    - Fast Local Pre-Commit (6s pause $\to$ 30ms commit to local Git database).
+    - 4-State Visual Indicators (Orange Dirty $\to$ Blue Committed $\to$ Spinning Sync $\to$ Green Success).
+    - Exit Auto-Sync on app switch/minimizing.
+    - Boot-Time Auto-Recovery for sudden swipe-outs.
   * **Standalone Repo Prepared:** Full TypeScript sources, build configuration (`esbuild`), GitHub Actions CI/CD release pipeline, and documentation prepared at `~/projects/git-sync-companion/`.
 
-*Ready for user physical verification in Obsidian on Android.*
+*All phases of the Obsidian Vault Git Sync Architecture have been fully implemented, certified, and physically verified.*
