@@ -1,4 +1,4 @@
 Previously, while agy-termux(you) were working with the project in previous session. It accidentally terminated and stopped because of too many request and traffic issue on your side. To let that session know that where it stopped , and from where to continue : it must need to retain the terminated work of last user sent prompt.  I want the full markdown file of the work occured by the last user sent prompt. (I don't want you to continue the project of that session)
-- last Session (conversation) name: "Automated Obsidian Git Sync Setup"            730 step.
+- last Session (conversation) name: "Automated Obsidian Git Sync Setup"   ,   info:      730 step.
 - You have adb access at localhost 5555.
 - You can store the file/files in the directory : storage/emulated/0/Documents/Obsidian
