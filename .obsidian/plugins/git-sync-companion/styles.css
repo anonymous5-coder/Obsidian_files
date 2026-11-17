@@ -1,0 +1,104 @@
+/* GitSync Companion Styles */
+
+.gitsync-fab {
+  position: fixed;
+  z-index: 9999;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background-color: var(--background-secondary, #202020);
+  border: 1.5px solid var(--background-modifier-border, #333333);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition: transform 0.12s ease, opacity 0.2s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  color: var(--text-normal, #dcddde);
+  box-sizing: border-box;
+}
+
+.gitsync-fab svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  pointer-events: none;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.gitsync-fab:active {
+  transform: scale(0.92);
+}
+
+/* Dimmed when clean and idle */
+.gitsync-fab-idle {
+  opacity: 0.55;
+}
+
+.gitsync-fab-idle:hover {
+  opacity: 0.85;
+}
+
+/* Vault Dirty (Uncommitted changes exist) */
+.gitsync-fab-dirty {
+  opacity: 1.0 !important;
+  border-color: var(--interactive-accent, #7057ff);
+  box-shadow: 0 4px 16px rgba(112, 87, 255, 0.35);
+}
+
+.gitsync-fab-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--color-orange, #ff9800);
+  border: 2px solid var(--background-secondary, #202020);
+  box-shadow: 0 0 6px rgba(255, 152, 0, 0.8);
+  animation: gitsync-pulse 1.8s infinite;
+  pointer-events: none;
+}
+
+/* Sync in Progress */
+.gitsync-fab-syncing {
+  opacity: 1.0 !important;
+  border-color: var(--interactive-accent, #7057ff);
+}
+
+.gitsync-fab-syncing svg {
+  animation: gitsync-spin 1s linear infinite;
+  color: var(--interactive-accent, #7057ff);
+}
+
+/* Sync Succeeded */
+.gitsync-fab-success {
+  opacity: 1.0 !important;
+  border-color: var(--color-green, #43a047) !important;
+  box-shadow: 0 4px 16px rgba(67, 160, 71, 0.4) !important;
+  color: var(--color-green, #43a047) !important;
+}
+
+/* Animations */
+@keyframes gitsync-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes gitsync-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.7;
+  }
+}
