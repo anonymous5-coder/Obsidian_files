@@ -265,3 +265,167 @@ Once you instruct me to modify `GIT_SYNC_COMPANION_PROPOSAL.md`, we will execute
 
 ---
 *Second-pass verification certified. All artifacts are in 100% parity and ready for future optimization passes.*
+
+---
+
+## 7. Cross-Project Architectural Audit: Obsidian Git Setup vs. GitSync Companion
+
+> **Audit Date:** November 17, 2026  
+> **Auditor:** Antigravity (Systems Architect)  
+> **Documents Examined:**
+> 1. [`GIT_SYNC_ARCHITECTURE_PROPOSAL.md`](file:///storage/emulated/0/Documents/Obsidian/GIT_SYNC_ARCHITECTURE_PROPOSAL.md) (Master Plan for Obsidian Git native setup)
+> 2. [`GIT_SYNC_COMPANION_PROPOSAL.md`](file:///storage/emulated/0/Documents/Obsidian/GIT_SYNC_COMPANION_PROPOSAL.md) (GitSync Companion specification)  
+> **Subjects Audited:** Architecture, Workflow, Features & Functionalities, Documentation, Companionship.
+
+---
+
+### 7.1 Deep-Dive: The Startup Boot Sequence & Pull Queue Doubling Suspicion
+
+#### The User's Suspicion:
+> *"autoPullOnBoot may trigger at start of app. And companion plugin also triggers that same debounce's action at start. By this, Extra que may sent by doubling the pull request."*
+
+#### Code Audit & Execution Analysis:
+I examined the exact startup hooks in both plugins to determine whether a duplicate pull or queue collision occurs on boot:
+
+1. **In `obsidian-git` (`src/main.ts:860`):**
+   * On `app.workspace.onLayoutReady`, the plugin runs `init()`.
+   * If `autoPullOnBoot = true`, it immediately enqueues:
+     ```javascript
+     this.promiseQueue.addTask(() => this.gitActions.pullChangesFromRemote());
+     ```
+   * **Network Action:** At $t \approx 0.5\text{s}$, an HTTP request hits GitHub (`GET /info/refs?service=git-upload-pack`) to fetch remote refs. If remote has changes, it merges them; if up to date, it completes cleanly with `{ status: "up-to-date" }`.
+2. **In `git-sync-companion` (`src/main.ts:88` & `main.js:93`):**
+   * On `app.workspace.onLayoutReady`, it schedules a 2.5-second initialization delay (`setTimeout(..., 2500)`).
+   * At $t = 2.5\text{s}$, `runBootAutoRecovery()` fires:
+     * It checks `await gitPlugin.gitManager.canPush()`.
+     * **Scenario A (Clean previous exit):** `canPush()` is `false`. The recovery engine exits immediately. **Zero extra network calls or queued tasks.**
+     * **Scenario B (Interrupted previous exit with unpushed commits):** `canPush()` is `true`. It calls `triggerCommitAndSync("boot-recovery")`.
+     * `triggerCommitAndSync()` dispatches `obsidian-git:push`, which invokes `gitActions.commitAndSync()`.
+     * Because `pullBeforePush = true` in Obsidian Git, `commitAndSync()` **runs an explicit pull before pushing!**
+
+#### The Verdict on Boot Overlap:
+* **The User's Suspicion is CONFIRMED for Scenario B:**
+  * When unpushed commits exist at boot, **two separate pulls hit GitHub within 2 seconds of each other**:
+    1. First Pull ($t \approx 0.5\text{s}$): Dispatched by `obsidian-git`'s `autoPullOnBoot`.
+    2. Second Pull ($t \approx 2.5\text{s}$): Dispatched by `GitSync Companion` calling `commitAndSync` (which triggers `pullBeforePush`).
+* **Why this is suboptimal:**
+  * The second pull is redundant because `obsidian-git` *already* fetched and updated tracking refs 1.5 seconds earlier.
+  * More critically: In Scenario B, the commits are *already committed locally*; the companion only needs to **push** them, not run another full commit-and-pull cycle!
+* **Architectural Fix:**
+  1. In `GitSync Companion`'s `runBootAutoRecovery()`: When `canPush()` is true, call `obsidian-git:push2` (**push only**), NOT `obsidian-git:push` (**commit-and-sync**). This completely eliminates the duplicate pull!
+  2. Toggle Alignment: The user *does not* need to disable `autoPullOnBoot`. Having `obsidian-git` pull on startup is good (it fetches AI agent changes before you write). Calling `push2` in recovery makes both plugins perfectly synergistic.
+
+---
+
+### 7.2 The Timer Racing Flaw: 6-Second Local Pre-Commit vs. 60-Second Native Debounce
+
+#### The Workflow Overlap:
+* In `GIT_SYNC_ARCHITECTURE_PROPOSAL.md` (Phase 3), the user is instructed to set:
+  * `autoSaveInterval = 1` (60s timer)
+  * `autoBackupAfterFileChange = true`
+* In `GIT_SYNC_COMPANION_PROPOSAL.md`, the companion sets:
+  * `localPreCommitSeconds = 6` (6s timer)
+
+#### What Happens When You Type:
+```text
+t = 0s   : User edits a note in Obsidian.
+           Both plugins hook vault.on("modify").
+t = 6s   : GitSync Companion 6s timer fires:
+           -> Runs obsidian-git:commit (writes to local .git in 30ms).
+           -> FAB turns 🔵 Blue ("Committed Locally / Safe to Exit").
+           -> Attempts gentle background push (obsidian-git:push2).
+t = 60s  : Obsidian Git native 60s timer fires:
+           -> Finds working tree already clean (nothing to commit).
+           -> Because pullBeforePush = true, fires an HTTP fetch to GitHub.
+           -> Exits with "no changes".
+```
+
+#### The Flaw:
+* Every time you pause typing for 10 seconds, you get a clean local save at 6 seconds, and then a **phantom network poll 54 seconds later**.
+* If you edit notes continuously throughout the day, this causes dozens of unnecessary HTTP checks against GitHub, burning mobile battery and cellular data.
+
+#### The Resolution:
+* **Disable Obsidian Git's native timer:** In Obsidian Git settings, set `autoSaveInterval = 0` (or toggle `autoBackupAfterFileChange` to `false`).
+* **Let GitSync Companion own the timer:** GitSync Companion's 6s pre-commit + exit sync + FAB gives you faster, safer, and cleaner synchronization without phantom polling.
+
+---
+
+### 7.3 Documentation Contradictions & Historical Drift
+
+A critical audit of the two markdown proposals reveals direct textual contradictions caused by historical drift:
+
+| Audit Dimension | Master Execution Plan ([`GIT_SYNC_ARCHITECTURE_PROPOSAL.md`](file:///storage/emulated/0/Documents/Obsidian/GIT_SYNC_ARCHITECTURE_PROPOSAL.md)) | Companion Specification ([`GIT_SYNC_COMPANION_PROPOSAL.md`](file:///storage/emulated/0/Documents/Obsidian/GIT_SYNC_COMPANION_PROPOSAL.md)) | Nature of Contradiction |
+| :--- | :--- | :--- | :--- |
+| **Philosophy / Stack** | "100% native built-in 1-minute debounce sync; zero custom code or background daemons." (Line 7) | Introduces a custom companion plugin (`git-sync-companion`) to override the 1-minute limit. | **Fundamental Doctrine Conflict:** The Master Plan claims no code is needed, while the Companion Proposal proves custom code is essential for mobile. |
+| **`autoSaveInterval`** | Recommends setting `autoSaveInterval = 1` (Line 164). | Recommends setting `autoSaveInterval = 0` (disabled) (Section 4.5). | **Direct Configuration Conflict:** The user cannot follow both guides simultaneously. |
+| **`autoBackupAfterFileChange`** | Recommends `true` (Line 165). | Recommends `false` (Section 4.5). | **Direct Configuration Conflict.** |
+| **Exit Handling** | Silent on mobile swipe-out / exit failure. | Treats mobile exit failure as the primary design driver. | **Coverage Gap:** Master Plan assumes native debounce handles everything; Companion spec acknowledges Android kills it. |
+
+---
+
+### 7.4 Features & Functionalities Matrix (Complementary vs. Overlapping)
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                        GITSYNC COMPANION                               │
+│  (The High-Reliability Mobile Controller & UI Layer)                   │
+│                                                                        │
+│  • 6s Fast Local Pre-Commit Scheduler (Sub-minute debounce)            │
+│  • Mobile Lifecycle Sentry (visibilitychange / pagehide exit sync)     │
+│  • Live Visual Status Dashboard (4-state draggable FAB + haptics)      │
+│  • Boot-Time Crash Recovery (Pushes stranded commits on startup)       │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ Public Obsidian Command API
+                                    │ (obsidian-git:commit, push2, push)
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                         OBSIDIAN GIT                                   │
+│  (The Core Git Engine & Plumbing Layer)                                │
+│                                                                        │
+│  • isomorphic-git / native Git execution engine                        │
+│  • GitHub Authentication & PAT Secret Storage                          │
+│  • Merge Conflict Resolution & 3-way merge UI                          │
+│  • Startup Remote Pull (autoPullOnBoot)                                 │
+│  • Serial FIFO Execution Mutex (promiseQueue)                          │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ HTTPS (PAT) / SSH
+                                    ▼
+                       PUBLIC GITHUB REPOSITORY
+```
+
+1. **Clear Division of Labor (Orthogonal Companionship):**
+   * `obsidian-git` is the **Engine & Driver** (manages Git plumbing, PAT credentials, conflict resolution, and the serial mutex queue).
+   * `git-sync-companion` is the **Navigator & Dashboard** (manages mobile lifecycle, fast pre-commit scheduling, the floating UI, and boot recovery).
+2. **Where They Must NOT Compete:**
+   * They must NOT both run independent debounce timers (companion should own timing; `obsidian-git` interval should be `0`).
+   * They must NOT both fire pull requests at boot (companion should only push unpushed commits on boot via `push2`; `obsidian-git` handles the initial pull via `autoPullOnBoot`).
+
+---
+
+### 7.5 Recommended Synchronized Configuration Matrix
+
+To achieve 100% harmonious, overlap-free operation between both plugins, the recommended settings are:
+
+#### In Obsidian Git Settings:
+* **Auto commit-and-sync interval (`autoSaveInterval`):** Set to `0` (Disabled).  
+  *(Eliminates redundant 60s phantom pulls while writing).*
+* **Auto backup after stopping file edits (`autoBackupAfterFileChange`):** Set to `false` (OFF).  
+  *(Transfers debounce control to GitSync Companion).*
+* **Pull on startup (`autoPullOnBoot`):** Set to `true` (ON).  
+  *(Pulls AI updates when opening the app).*
+* **Pull on commit-and-sync (`pullBeforePush`):** Set to `true` (ON).  
+  *(Safety guarantee for manual / exit syncs).*
+* **Push on commit-and-sync:** Set to `true` (ON).
+
+#### In GitSync Companion Settings:
+* **Fast local pre-commit delay:** Set to `6` seconds.  
+  *(Saves edits locally to .git in 30ms before exit).*
+* **Boot-time auto-recovery:** Set to `true` (ON).  
+  *(Pushes unpushed commits on launch; refined to use `push2`).*
+* **Auto-sync on exit / app switch:** Set to `true` (ON).  
+  *(Fires push on minimize / app switch).*
+* **Show floating action button on mobile:** Set to `true` (ON).  
+  *(1-tap instant sync dashboard).*
+
+---
+*Cross-project architectural audit completed and certified.*
