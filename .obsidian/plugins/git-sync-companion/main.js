@@ -1,4 +1,4 @@
-const { Plugin, PluginSettingTab, Setting, Notice, Platform } = require("obsidian");
+const { Plugin, PluginSettingTab, Setting, Notice, Platform, MarkdownView } = require("obsidian");
 
 const DEFAULT_SETTINGS = {
   showFabOnMobile: true,
@@ -55,11 +55,22 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
       callback: () => this.toggleFab(),
     });
 
-    // 3. Vault Modification Listeners (Mark dirty state immediately)
+    // 3. Vault & Editor Modification Listeners (Mark dirty state immediately on keystroke)
     this.registerEvent(this.app.vault.on("modify", () => this.onVaultChange("modify")));
     this.registerEvent(this.app.vault.on("create", () => this.onVaultChange("create")));
     this.registerEvent(this.app.vault.on("delete", () => this.onVaultChange("delete")));
     this.registerEvent(this.app.vault.on("rename", () => this.onVaultChange("rename")));
+    this.registerEvent(this.app.workspace.on("editor-change", () => this.onVaultChange("editor")));
+
+    // Helper: Flush active editor in-memory buffer to disk
+    this.flushActiveEditor = () => {
+      try {
+        const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (activeView && typeof activeView.save === "function") {
+          activeView.save();
+        }
+      } catch (e) {}
+    };
 
     // 4. Hook obsidian-git events for visual badge updates
     this.registerEvent(this.app.workspace.on("obsidian-git:refs-changed", () => this.onGitRefsChanged()));
@@ -68,6 +79,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     // 5. 30ms Local-Only Exit Sentry (Android App Switch, Screen Lock, Minimize, Swipe-Out)
     this.handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
+        this.flushActiveEditor();
         if (this.settings.exitAction === "commit" && this.isDirty) {
           console.log("[GitSync Companion] App hidden with pending edits. Running 30ms local commit sentry...");
           this.triggerLocalCommit("lifecycle-exit");
@@ -79,6 +91,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     };
 
     this.handlePageHide = () => {
+      this.flushActiveEditor();
       if (this.settings.exitAction === "commit" && this.isDirty) {
         console.log("[GitSync Companion] Pagehide event. Running 30ms local commit sentry...");
         this.triggerLocalCommit("pagehide");
@@ -136,6 +149,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
   // Idea I1 & I5: Fast Local Commit (30ms, Zero Network, 100% Offline Durability)
   async triggerLocalCommit(source = "manual") {
     if (this.isSyncing) return;
+    this.flushActiveEditor();
 
     const gitPlugin = this.app.plugins?.getPlugin("obsidian-git");
     if (!gitPlugin) return;
@@ -168,6 +182,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
       console.log(`[GitSync Companion] Sync already in progress, ignoring trigger from ${source}.`);
       return;
     }
+    this.flushActiveEditor();
 
     this.isSyncing = true;
     this.syncState = "syncing";
