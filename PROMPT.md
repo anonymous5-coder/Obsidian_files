@@ -1,10 +1,6 @@
 
-I want to know and clarify this:
-- Is 6 second pre commit does commits only or full devounce's syncing action or push along with it only?
-- 1 minute debounce does all git syncing actions right? i.e commit>pull>push
-- at 0.5 sec, pull happens only right?
-- at 2.5 sec, pull then push happens only right?
-- what is 
 
-If above all questions are right then, I want to change your given solutions to this:
-
+**Go ahead for next pass now.**
+###### Execution reference
+ **Your given plan and solution**:
+ - section 8 in REPORT  (i.e. 8.3 to 8.5)

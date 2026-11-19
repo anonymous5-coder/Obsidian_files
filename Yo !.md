@@ -1,1 +1,1 @@
-This is my git test.
+This is my git test. Let's see, if new state works!

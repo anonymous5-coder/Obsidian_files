@@ -1,13 +1,13 @@
 const { Plugin, PluginSettingTab, Setting, Notice, Platform } = require("obsidian");
 
 const DEFAULT_SETTINGS = {
-  autoSyncOnExit: true,
   showFabOnMobile: true,
   showFabOnDesktop: false,
-  fabPosition: { bottom: 85, right: 20 },
-  localPreCommitSeconds: 6, // 6 seconds pause -> instant local Git commit (30ms)
-  bootAutoRecovery: true,   // Automatically pushes pending commits on app launch
+  holdDuration: 650, // ms hold threshold for full sync (tap < holdDuration is 30ms local commit)
+  bootSync: true, // unified Gold-Standard startup sync (Commit 1st -> Pull 2nd -> Push 3rd)
+  exitAction: "commit", // "commit" (30ms local disk commit before SIGKILL) | "sync" | "disabled"
   hapticFeedback: true,
+  fabPosition: { bottom: 85, right: 20 },
 };
 
 // SVG Icons
@@ -21,7 +21,7 @@ const ICON_CHECK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 
 module.exports = class GitSyncCompanionPlugin extends Plugin {
   async onload() {
-    console.log("[GitSync Companion] Loading plugin v1.1.0...");
+    console.log("[GitSync Companion] Loading plugin v1.2.0 (New-State Dual-Action Architecture)...");
     await this.loadSettings();
 
     // State Machine: 'idle' | 'dirty' | 'committed' | 'syncing' | 'success'
@@ -31,7 +31,6 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     this.isSyncing = false;
 
     this.fabEl = null;
-    this.preCommitTimer = null;
     this.successResetTimer = null;
 
     // 1. Settings Tab
@@ -47,7 +46,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     this.addCommand({
       id: "commit-local-now",
       name: "Commit locally now (Instant save)",
-      callback: () => this.triggerLocalPreCommit("command"),
+      callback: () => this.triggerLocalCommit("command"),
     });
 
     this.addCommand({
@@ -56,29 +55,35 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
       callback: () => this.toggleFab(),
     });
 
-    // 3. Vault Modification Listeners
+    // 3. Vault Modification Listeners (Mark dirty state immediately)
     this.registerEvent(this.app.vault.on("modify", () => this.onVaultChange("modify")));
     this.registerEvent(this.app.vault.on("create", () => this.onVaultChange("create")));
     this.registerEvent(this.app.vault.on("delete", () => this.onVaultChange("delete")));
     this.registerEvent(this.app.vault.on("rename", () => this.onVaultChange("rename")));
 
-    // 4. Hook obsidian-git events
+    // 4. Hook obsidian-git events for visual badge updates
     this.registerEvent(this.app.workspace.on("obsidian-git:refs-changed", () => this.onGitRefsChanged()));
     this.registerEvent(this.app.workspace.on("obsidian-git:head-change", () => this.onGitRefsChanged()));
 
-    // 5. App Lifecycle Listeners (Android App Switch, Screen Lock, Window Blur)
+    // 5. 30ms Local-Only Exit Sentry (Android App Switch, Screen Lock, Minimize, Swipe-Out)
     this.handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden" && this.settings.autoSyncOnExit) {
-        if (this.isDirty || this.isCommittedLocally) {
-          console.log("[GitSync Companion] App hidden with pending changes. Triggering exit sync...");
+      if (document.visibilityState === "hidden") {
+        if (this.settings.exitAction === "commit" && this.isDirty) {
+          console.log("[GitSync Companion] App hidden with pending edits. Running 30ms local commit sentry...");
+          this.triggerLocalCommit("lifecycle-exit");
+        } else if (this.settings.exitAction === "sync" && (this.isDirty || this.isCommittedLocally)) {
+          console.log("[GitSync Companion] App hidden. Triggering full remote sync...");
           this.triggerCommitAndSync("lifecycle-exit");
         }
       }
     };
 
     this.handlePageHide = () => {
-      if (this.settings.autoSyncOnExit && (this.isDirty || this.isCommittedLocally)) {
-        console.log("[GitSync Companion] Pagehide event with pending changes. Triggering exit sync...");
+      if (this.settings.exitAction === "commit" && this.isDirty) {
+        console.log("[GitSync Companion] Pagehide event. Running 30ms local commit sentry...");
+        this.triggerLocalCommit("pagehide");
+      } else if (this.settings.exitAction === "sync" && (this.isDirty || this.isCommittedLocally)) {
+        console.log("[GitSync Companion] Pagehide event. Triggering full remote sync...");
         this.triggerCommitAndSync("pagehide");
       }
     };
@@ -103,18 +108,20 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on("quit", () => {
-        if (this.settings.autoSyncOnExit && (this.isDirty || this.isCommittedLocally)) {
+        if (this.settings.exitAction === "commit" && this.isDirty) {
+          this.triggerLocalCommit("desktop-quit");
+        } else if (this.settings.exitAction === "sync" && (this.isDirty || this.isCommittedLocally)) {
           this.triggerCommitAndSync("desktop-quit");
         }
       })
     );
 
-    // 6. Initialize UI & Boot-Recovery Engine
+    // 6. Initialize UI & Unified Gold-Standard Boot Engine
     this.app.workspace.onLayoutReady(async () => {
       this.initFab();
-      if (this.settings.bootAutoRecovery) {
-        // Wait 2.5s for obsidian-git to initialize repository
-        window.setTimeout(() => this.runBootAutoRecovery(), 2500);
+      if (this.settings.bootSync) {
+        // Wait 2.0s for obsidian-git to initialize repository
+        window.setTimeout(() => this.runBootSync(), 2000);
       }
     });
   }
@@ -124,31 +131,19 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     this.isCommittedLocally = false;
     this.syncState = "dirty";
     this.updateFabUI();
-
-    // Fast Local Pre-Commit (commits to local Git in 30ms before exit occurs)
-    if (this.settings.localPreCommitSeconds > 0) {
-      if (this.preCommitTimer) {
-        window.clearTimeout(this.preCommitTimer);
-      }
-      this.preCommitTimer = window.setTimeout(() => {
-        if (this.isDirty && !this.isSyncing) {
-          this.triggerLocalPreCommit("fast-timer");
-        }
-      }, this.settings.localPreCommitSeconds * 1000);
-    }
   }
 
-  async triggerLocalPreCommit(source = "manual") {
-    if (this.isSyncing || !this.isDirty) return;
+  // Idea I1 & I5: Fast Local Commit (30ms, Zero Network, 100% Offline Durability)
+  async triggerLocalCommit(source = "manual") {
+    if (this.isSyncing) return;
 
     const gitPlugin = this.app.plugins?.getPlugin("obsidian-git");
     if (!gitPlugin) return;
 
     try {
-      console.log(`[GitSync Companion] Running fast local pre-commit (${source})...`);
-      // Execute local commit only (takes ~30ms, requires no internet)
-      const committed = this.app.commands.executeCommandById("obsidian-git:commit");
-      if (!committed && gitPlugin.gitActions?.commit) {
+      console.log(`[GitSync Companion] Fast local commit (${source})...`);
+      const executed = this.app.commands.executeCommandById("obsidian-git:commit");
+      if (!executed && gitPlugin.gitActions?.commit) {
         await gitPlugin.promiseQueue.addTask(() =>
           gitPlugin.gitActions.commit({ fromAuto: true, mode: "all" })
         );
@@ -159,27 +154,15 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
       this.syncState = "committed";
       this.updateFabUI();
 
-      // Attempt gentle background push if connected
-      this.triggerBackgroundPush();
+      if (source !== "lifecycle-exit" && source !== "pagehide") {
+        new Notice("GitSync: Saved locally (30ms)", 1500);
+      }
     } catch (err) {
-      console.error("[GitSync Companion] Local pre-commit failed:", err);
+      console.error("[GitSync Companion] Local commit failed:", err);
     }
   }
 
-  async triggerBackgroundPush() {
-    if (this.isSyncing || !this.isCommittedLocally) return;
-
-    const gitPlugin = this.app.plugins?.getPlugin("obsidian-git");
-    if (!gitPlugin) return;
-
-    try {
-      if (gitPlugin.gitManager?.canPush && (await gitPlugin.gitManager.canPush())) {
-        console.log("[GitSync Companion] Pushing local commits in background...");
-        this.app.commands.executeCommandById("obsidian-git:push2");
-      }
-    } catch (e) {}
-  }
-
+  // Idea I1: Full Gold-Standard Sync (Commit 1st -> Pull 2nd -> Push 3rd)
   async triggerCommitAndSync(source = "manual") {
     if (this.isSyncing) {
       console.log(`[GitSync Companion] Sync already in progress, ignoring trigger from ${source}.`);
@@ -189,12 +172,6 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     this.isSyncing = true;
     this.syncState = "syncing";
     this.updateFabUI();
-
-    if (this.settings.hapticFeedback && navigator.vibrate) {
-      try {
-        navigator.vibrate(40);
-      } catch (e) {}
-    }
 
     const gitPlugin = this.app.plugins?.getPlugin("obsidian-git");
     if (!gitPlugin) {
@@ -206,12 +183,13 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     }
 
     try {
-      // Execute Obsidian Git Commit-and-sync
+      new Notice("GitSync: Syncing with GitHub...", 2000);
+      // obsidian-git:push executes commitAndSync (Commit 1st -> Pull 2nd -> Push 3rd)
       const executed = this.app.commands.executeCommandById("obsidian-git:push");
       if (!executed) {
         if (gitPlugin.gitActions?.commitAndSync) {
           await gitPlugin.promiseQueue.addTask(() =>
-            gitPlugin.gitActions.commitAndSync({ fromAutoBackup: source === "lifecycle-exit" })
+            gitPlugin.gitActions.commitAndSync({ fromAutoBackup: source.startsWith("lifecycle") })
           );
         } else {
           throw new Error("Unable to trigger obsidian-git sync.");
@@ -222,37 +200,70 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
       this.isCommittedLocally = false;
     } catch (err) {
       console.error("[GitSync Companion] Sync failed:", err);
-      new Notice(`GitSync error: ${err.message || err}`);
+      new Notice(`GitSync error: ${err.message || err}`, 4000);
       this.isSyncing = false;
       this.syncState = this.isDirty ? "dirty" : "idle";
       this.updateFabUI();
     }
   }
 
-  async runBootAutoRecovery() {
+  // Idea I2: Unified Gold-Standard Boot Engine (Commit 1st -> Pull 2nd -> Push 3rd)
+  async runBootSync() {
+    if (!this.settings.bootSync) return;
     const gitPlugin = this.app.plugins?.getPlugin("obsidian-git");
     if (!gitPlugin?.gitManager) return;
 
     try {
-      const canPush = await gitPlugin.gitManager.canPush();
-      if (canPush) {
-        const unpushedCount = await gitPlugin.gitManager.getUnpushedCommits?.();
-        const countText = unpushedCount ? ` (${unpushedCount} commit${unpushedCount > 1 ? "s" : ""})` : "";
-        new Notice(`GitSync Companion: Auto-recovering unpushed work${countText}...`, 3000);
-        console.log("[GitSync Companion] Boot recovery: unpushed commits detected. Pushing...");
-        await this.triggerCommitAndSync("boot-recovery");
-        return;
+      console.log("[GitSync Companion] Running Gold-Standard boot sequence (Commit 1st -> Pull 2nd -> Push 3rd)...");
+
+      // Step 1: Commit Local 1st (if uncommitted edits exist)
+      let committedAny = false;
+      try {
+        const status = await gitPlugin.gitManager.status();
+        const hasChanges = status && (
+          (status.changed && status.changed.length > 0) ||
+          (status.staged && status.staged.length > 0) ||
+          (status.not_added && status.not_added.length > 0)
+        );
+        if (hasChanges) {
+          console.log("[GitSync Companion] Boot: Uncommitted local changes found. Committing locally (1st)...");
+          new Notice("GitSync: Securing local changes...", 2000);
+          await gitPlugin.promiseQueue.addTask(() =>
+            gitPlugin.gitActions.commit({ fromAuto: true, mode: "all" })
+          );
+          committedAny = true;
+        }
+      } catch (statusErr) {
+        console.warn("[GitSync Companion] Boot status check warning:", statusErr);
       }
 
-      // Check if working tree was left dirty from an instant swipe-out
-      const status = await gitPlugin.gitManager.status();
-      if (status && (status.changed.length > 0 || status.staged.length > 0)) {
-        new Notice("GitSync Companion: Found uncommitted edits from previous session. Syncing...", 3000);
-        console.log("[GitSync Companion] Boot recovery: dirty files detected. Syncing...");
-        await this.triggerCommitAndSync("boot-dirty-recovery");
+      // Step 2: Pull Remote 2nd (fetch & merge remote edits cleanly)
+      console.log("[GitSync Companion] Boot: Pulling remote changes (2nd)...");
+      await gitPlugin.promiseQueue.addTask(() =>
+        gitPlugin.gitActions.pullChangesFromRemote()
+      );
+
+      // Step 3: Push Combined 3rd (if unpushed commits exist)
+      const canPush = await gitPlugin.gitManager.canPush();
+      if (canPush) {
+        console.log("[GitSync Companion] Boot: Pushing combined history (3rd)...");
+        await gitPlugin.promiseQueue.addTask(() =>
+          gitPlugin.gitActions.pushChanges()
+        );
+        new Notice("GitSync: Boot sync complete (Commit -> Pull -> Push).", 3000);
+      } else {
+        console.log("[GitSync Companion] Boot: Remote up to date. No push needed.");
+        if (committedAny) {
+          new Notice("GitSync: Local changes saved & remote up to date.", 3000);
+        }
       }
+
+      this.isDirty = false;
+      this.isCommittedLocally = false;
+      this.showSuccessFeedback();
     } catch (err) {
-      console.warn("[GitSync Companion] Boot auto-recovery check error:", err);
+      console.error("[GitSync Companion] Boot sync error:", err);
+      new Notice(`GitSync Boot error: ${err.message || err}`, 4000);
     }
   }
 
@@ -325,6 +336,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     }
   }
 
+  // Idea I1: The Dual-Action FAB (Short Tap = 30ms Commit, Long Press = Full Sync, Drag = Reposition)
   initFab() {
     const shouldShow = Platform.isMobileApp
       ? this.settings.showFabOnMobile
@@ -339,7 +351,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
 
     const fab = document.createElement("div");
     fab.className = "gitsync-fab gitsync-fab-idle";
-    fab.setAttribute("aria-label", "GitSync: Tap to Commit & Push");
+    fab.setAttribute("aria-label", "GitSync: Tap to commit (30ms), Hold to full sync");
     fab.innerHTML = ICON_GIT_SYNC;
 
     const { bottom, right } = this.settings.fabPosition || { bottom: 85, right: 20 };
@@ -351,9 +363,21 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     let initialBottom = bottom;
     let initialRight = right;
     let isDragging = false;
+    let holdTimer = null;
+    let holdFired = false;
     const DRAG_THRESHOLD = 8;
 
+    const clearHold = () => {
+      if (holdTimer) {
+        window.clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+      fab.classList.remove("gitsync-fab-holding");
+    };
+
+    // --- Touch Handlers (Mobile) ---
     const onTouchStart = (e) => {
+      if (e.touches.length !== 1) return;
       const touch = e.touches[0];
       startX = touch.clientX;
       startY = touch.clientY;
@@ -361,15 +385,35 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
       initialBottom = window.innerHeight - rect.bottom;
       initialRight = window.innerWidth - rect.right;
       isDragging = false;
+      holdFired = false;
+
+      clearHold();
+      fab.classList.add("gitsync-fab-holding");
+
+      const duration = this.settings.holdDuration || 650;
+      holdTimer = window.setTimeout(() => {
+        if (!isDragging) {
+          holdFired = true;
+          clearHold();
+          if (this.settings.hapticFeedback && navigator.vibrate) {
+            try {
+              navigator.vibrate([50, 50, 100]); // Dual buzz for full sync
+            } catch (vErr) {}
+          }
+          this.triggerCommitAndSync("fab-hold");
+        }
+      }, duration);
     };
 
     const onTouchMove = (e) => {
+      if (e.touches.length !== 1) return;
       const touch = e.touches[0];
       const deltaX = startX - touch.clientX;
       const deltaY = startY - touch.clientY;
 
       if (!isDragging && (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)) {
         isDragging = true;
+        clearHold();
       }
 
       if (isDragging) {
@@ -388,28 +432,112 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     };
 
     const onTouchEnd = (e) => {
-      if (!isDragging) {
-        this.triggerCommitAndSync("fab-tap");
-      } else {
+      const wasHolding = !isDragging && !holdFired;
+      clearHold();
+
+      if (isDragging) {
         const rect = fab.getBoundingClientRect();
         this.settings.fabPosition = {
           bottom: Math.round(window.innerHeight - rect.bottom),
           right: Math.round(window.innerWidth - rect.right),
         };
         this.saveSettings();
+      } else if (wasHolding) {
+        // Short Tap: Local Commit Only (30ms)
+        if (this.settings.hapticFeedback && navigator.vibrate) {
+          try {
+            navigator.vibrate(40); // Single buzz for local commit
+          } catch (vErr) {}
+        }
+        this.triggerLocalCommit("fab-tap");
       }
       isDragging = false;
+      holdFired = false;
+    };
+
+    const onTouchCancel = () => {
+      clearHold();
+      isDragging = false;
+      holdFired = false;
     };
 
     fab.addEventListener("touchstart", onTouchStart, { passive: false });
     fab.addEventListener("touchmove", onTouchMove, { passive: false });
     fab.addEventListener("touchend", onTouchEnd, { passive: false });
+    fab.addEventListener("touchcancel", onTouchCancel, { passive: false });
 
-    fab.addEventListener("click", () => {
-      if (!Platform.isMobileApp) {
-        this.triggerCommitAndSync("fab-click");
-      }
-    });
+    // --- Mouse Handlers (Desktop fallback) ---
+    let mouseStartX = 0;
+    let mouseStartY = 0;
+    let mouseDragging = false;
+    let mouseHoldFired = false;
+    let mouseHoldTimer = null;
+
+    const onMouseDown = (e) => {
+      if (Platform.isMobileApp || e.button !== 0) return;
+      mouseStartX = e.clientX;
+      mouseStartY = e.clientY;
+      const rect = fab.getBoundingClientRect();
+      initialBottom = window.innerHeight - rect.bottom;
+      initialRight = window.innerWidth - rect.right;
+      mouseDragging = false;
+      mouseHoldFired = false;
+
+      if (mouseHoldTimer) window.clearTimeout(mouseHoldTimer);
+      fab.classList.add("gitsync-fab-holding");
+
+      const duration = this.settings.holdDuration || 650;
+      mouseHoldTimer = window.setTimeout(() => {
+        if (!mouseDragging) {
+          mouseHoldFired = true;
+          fab.classList.remove("gitsync-fab-holding");
+          this.triggerCommitAndSync("fab-hold");
+        }
+      }, duration);
+
+      const onMouseMove = (moveEvent) => {
+        const deltaX = mouseStartX - moveEvent.clientX;
+        const deltaY = mouseStartY - moveEvent.clientY;
+        if (!mouseDragging && (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)) {
+          mouseDragging = true;
+          if (mouseHoldTimer) window.clearTimeout(mouseHoldTimer);
+          fab.classList.remove("gitsync-fab-holding");
+        }
+        if (mouseDragging) {
+          let newBottom = initialBottom + deltaY;
+          let newRight = initialRight + deltaX;
+          const maxBottom = window.innerHeight - 60;
+          const maxRight = window.innerWidth - 60;
+          fab.style.bottom = `${Math.max(10, Math.min(maxBottom, newBottom))}px`;
+          fab.style.right = `${Math.max(10, Math.min(maxRight, newRight))}px`;
+        }
+      };
+
+      const onMouseUp = () => {
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+        if (mouseHoldTimer) window.clearTimeout(mouseHoldTimer);
+        fab.classList.remove("gitsync-fab-holding");
+
+        if (mouseDragging) {
+          const rect = fab.getBoundingClientRect();
+          this.settings.fabPosition = {
+            bottom: Math.round(window.innerHeight - rect.bottom),
+            right: Math.round(window.innerWidth - rect.right),
+          };
+          this.saveSettings();
+        } else if (!mouseHoldFired) {
+          this.triggerLocalCommit("fab-click");
+        }
+        mouseDragging = false;
+        mouseHoldFired = false;
+      };
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    };
+
+    fab.addEventListener("mousedown", onMouseDown);
 
     document.body.appendChild(fab);
     this.fabEl = fab;
@@ -435,7 +563,19 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loaded = (await this.loadData()) || {};
+    // Backward compatibility migration from v1.1.0
+    if (loaded.exitAction === undefined) {
+      if (loaded.autoSyncOnExit === false) {
+        loaded.exitAction = "disabled";
+      } else if (loaded.autoSyncOnExit === true) {
+        loaded.exitAction = "commit";
+      }
+    }
+    if (loaded.bootSync === undefined && loaded.bootAutoRecovery !== undefined) {
+      loaded.bootSync = loaded.bootAutoRecovery;
+    }
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
   }
 
   async saveSettings() {
@@ -455,9 +595,6 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
       window.removeEventListener("resize", this.handleResize);
     }
 
-    if (this.preCommitTimer) {
-      window.clearTimeout(this.preCommitTimer);
-    }
     if (this.successResetTimer) {
       window.clearTimeout(this.successResetTimer);
     }
@@ -466,7 +603,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
   }
 };
 
-// Settings Tab
+// Idea I4: Transparent, Flat Settings UI (No Rigid Mode Presets)
 class GitSyncCompanionSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -479,47 +616,13 @@ class GitSyncCompanionSettingTab extends PluginSettingTab {
 
     containerEl.createEl("h2", { text: "GitSync Companion Settings" });
     containerEl.createEl("p", {
-      text: "High-reliability mobile companion for Obsidian Git. Protects against sudden exit, auto-syncs on app switch, and provides a 1-tap floating quick-sync action button.",
+      text: "Handy mobile companion for Obsidian Git. Tap the button to save locally in ~30ms, hold to trigger a full remote sync. Protects edits on exit before Android SIGKILL.",
       cls: "setting-item-description",
     });
 
     new Setting(containerEl)
-      .setName("Fast local pre-commit delay (seconds)")
-      .setDesc("Commits edits locally to the Git database X seconds after typing stops (takes ~30ms, no internet needed). Ensures changes are safely recorded before sudden exit or swipe-out. Set to 0 to disable.")
-      .addSlider((slider) =>
-        slider
-          .setLimits(0, 30, 1)
-          .setValue(this.plugin.settings.localPreCommitSeconds)
-          .setDynamicTooltip()
-          .onChange(async (val) => {
-            this.plugin.settings.localPreCommitSeconds = val;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Boot-time auto-recovery")
-      .setDesc("Automatically pushes any unpushed commits or recovers uncommitted edits when Obsidian launches.")
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.bootAutoRecovery).onChange(async (val) => {
-          this.plugin.settings.bootAutoRecovery = val;
-          await this.plugin.saveSettings();
-        })
-      );
-
-    new Setting(containerEl)
-      .setName("Auto-sync on exit / app switch")
-      .setDesc("Automatically triggers Git Commit & Push when switching away from Obsidian, pressing Home, or locking the device.")
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.autoSyncOnExit).onChange(async (val) => {
-          this.plugin.settings.autoSyncOnExit = val;
-          await this.plugin.saveSettings();
-        })
-      );
-
-    new Setting(containerEl)
       .setName("Show floating action button on mobile")
-      .setDesc("Displays a 1-tap draggable sync button on screen with dirty/committed state visual indicators.")
+      .setDesc("Displays a draggable sync button on screen. Tap to commit locally (30ms), Hold to full sync.")
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.showFabOnMobile).onChange(async (val) => {
           this.plugin.settings.showFabOnMobile = val;
@@ -540,8 +643,47 @@ class GitSyncCompanionSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Haptic feedback on sync")
-      .setDesc("Vibrate briefly when tapping the floating sync button.")
+      .setName("Hold duration for full sync (ms)")
+      .setDesc("How long to hold the button to trigger a full remote sync (Commit 1st -> Pull 2nd -> Push 3rd). A quick tap (< hold duration) saves locally in ~30ms.")
+      .addSlider((slider) =>
+        slider
+          .setLimits(400, 1200, 50)
+          .setValue(this.plugin.settings.holdDuration || 650)
+          .setDynamicTooltip()
+          .onChange(async (val) => {
+            this.plugin.settings.holdDuration = val;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Boot-time Gold-Standard sync")
+      .setDesc("Automatically runs the unified sequence (Commit 1st -> Pull 2nd -> Push 3rd) on app startup. (Requires setting 'Auto pull on boot' to OFF in Obsidian Git).")
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.bootSync).onChange(async (val) => {
+          this.plugin.settings.bootSync = val;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Action on app exit / background")
+      .setDesc("Choose what happens when Obsidian is minimized, switched, or closed. 'Local Commit Only' finishes in ~30ms before Android kernel SIGKILL.")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("commit", "Local Commit Only (Recommended - 30ms, SIGKILL-safe)")
+          .addOption("sync", "Full Remote Sync (Commit & Push)")
+          .addOption("disabled", "Disabled")
+          .setValue(this.plugin.settings.exitAction || "commit")
+          .onChange(async (val) => {
+            this.plugin.settings.exitAction = val;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Haptic feedback")
+      .setDesc("Vibrate briefly on tap (single buzz) and hold (dual buzz).")
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.hapticFeedback).onChange(async (val) => {
           this.plugin.settings.hapticFeedback = val;

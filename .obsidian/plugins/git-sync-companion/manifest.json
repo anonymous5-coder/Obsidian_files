@@ -1,9 +1,9 @@
 {
   "id": "git-sync-companion",
   "name": "GitSync Companion",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "minAppVersion": "0.15.0",
-  "description": "High-reliability mobile companion for Obsidian Git. Auto-syncs on app exit or background, and provides a 1-tap draggable floating quick-sync action button.",
+  "description": "Dual-action floating sync controller and lifecycle sentry for Obsidian Git on mobile. Tap for 30ms local commit, hold for full Gold-Standard remote sync.",
   "author": "anonymous5-coder",
   "authorUrl": "https://github.com/anonymous5-coder",
   "isDesktopOnly": false
