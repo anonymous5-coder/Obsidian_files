@@ -222,60 +222,52 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     }
   }
 
-  // Idea I2: Unified Gold-Standard Boot Engine (Commit 1st -> Pull 2nd -> Push 3rd)
+  // Idea I2: Unified Gold-Standard Boot Engine
+  // Uses the same atomic commitAndSync path as the hold-sync FAB action.
+  // obsidian-git:push internally runs Commit 1st -> Pull 2nd -> Push 3rd as one
+  // atomic operation, firing refs-changed only once at the end.
   async runBootSync() {
     if (!this.settings.bootSync) return;
     const gitPlugin = this.app.plugins?.getPlugin("obsidian-git");
     if (!gitPlugin?.gitManager) return;
 
     try {
-      console.log("[GitSync Companion] Running Gold-Standard boot sequence (Commit 1st -> Pull 2nd -> Push 3rd)...");
+      console.log("[GitSync Companion] Running Gold-Standard boot sync...");
 
-      // Step 1: Commit Local 1st (if uncommitted edits exist)
-      let committedAny = false;
+      // Pre-flight check: determine what work exists
+      let hasUncommitted = false;
+      let hasUnpushed = false;
       try {
         const status = await gitPlugin.gitManager.status();
-        const hasChanges = status && (
+        hasUncommitted = status && (
           (status.changed && status.changed.length > 0) ||
           (status.staged && status.staged.length > 0) ||
           (status.not_added && status.not_added.length > 0)
         );
-        if (hasChanges) {
-          console.log("[GitSync Companion] Boot: Uncommitted local changes found. Committing locally (1st)...");
-          new Notice("GitSync: Securing local changes...", 2000);
-          await gitPlugin.promiseQueue.addTask(() =>
-            gitPlugin.gitActions.commit({ fromAuto: true, mode: "all" })
-          );
-          committedAny = true;
-        }
-      } catch (statusErr) {
-        console.warn("[GitSync Companion] Boot status check warning:", statusErr);
+      } catch (e) {}
+      try {
+        hasUnpushed = await gitPlugin.gitManager.canPush();
+      } catch (e) {}
+
+      if (!hasUncommitted && !hasUnpushed) {
+        console.log("[GitSync Companion] Boot: Nothing to sync. Vault clean & remote up to date.");
+        return;
       }
 
-      // Step 2: Pull Remote 2nd (fetch & merge remote edits cleanly)
-      console.log("[GitSync Companion] Boot: Pulling remote changes (2nd)...");
-      await gitPlugin.promiseQueue.addTask(() =>
-        gitPlugin.gitActions.pullChangesFromRemote()
-      );
-
-      // Step 3: Push Combined 3rd (if unpushed commits exist)
-      const canPush = await gitPlugin.gitManager.canPush();
-      if (canPush) {
-        console.log("[GitSync Companion] Boot: Pushing combined history (3rd)...");
-        await gitPlugin.promiseQueue.addTask(() =>
-          gitPlugin.gitActions.pushChanges()
-        );
-        new Notice("GitSync: Boot sync complete (Commit -> Pull -> Push).", 3000);
+      // Show notice based on what needs syncing
+      if (hasUncommitted && hasUnpushed) {
+        new Notice("GitSync: Boot sync — securing edits & pushing pending commits...", 3000);
+      } else if (hasUncommitted) {
+        new Notice("GitSync: Boot sync — securing uncommitted edits...", 3000);
       } else {
-        console.log("[GitSync Companion] Boot: Remote up to date. No push needed.");
-        if (committedAny) {
-          new Notice("GitSync: Local changes saved & remote up to date.", 3000);
-        }
+        new Notice("GitSync: Boot sync — pushing pending commits...", 3000);
       }
 
-      this.isDirty = false;
-      this.isCommittedLocally = false;
-      this.showSuccessFeedback();
+      // Delegate to the same atomic commitAndSync used by FAB hold-sync.
+      // This ensures Commit 1st -> Pull 2nd -> Push 3rd runs as a single
+      // operation inside obsidian-git's serial promise queue.
+      await this.triggerCommitAndSync("boot-sync");
+
     } catch (err) {
       console.error("[GitSync Companion] Boot sync error:", err);
       new Notice(`GitSync Boot error: ${err.message || err}`, 4000);
