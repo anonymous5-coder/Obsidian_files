@@ -34,3 +34,4 @@ Smaller items:
 - Agy's 1.3s pull and 1.2s push split was an estimate, not a measurement.
 - The plugin folder is tracked in your public repo. Run `git ls-files | grep data.json` to make sure no credentials are tracked.
 
+(Airplane mode check failed as well, )
