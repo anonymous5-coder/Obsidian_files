@@ -1,0 +1,5 @@
+Plan approved with these changes:
+1. TECHNICAL_CHANGE_REPORT.md now exists in the repo (I restored it). Read and update it; don't overwrite.
+2. Before rebuilding, copy the current vault and repo main.js to ~/backups/ (not inside the vault). After the esbuild build, diff the output against the current vault main.js and show me the diff before deploying. If tsc --noEmit fails, report why; don't skip it.
+3. In the finally block: clear isSyncing, then recompute FAB state from canPush() (blue if unpushed, else green), since events are ignored mid-sync.
+4. First check for yourself which tools you can actually use here (git, adb, etc.) and tell me. If git is available, use it read-only (status, log, diff); never commit or push, because the plugin commits by itself and that would corrupt my tests. Any device checks you can run are pre-checks only: paste raw outputs, don't write "verified". I'll do the final swipe-out and airplane tests myself.
