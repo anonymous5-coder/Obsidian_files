@@ -1,3 +1,1 @@
-Check last commit of Yo!.md file, does it contain this exact content? : "Swipe out!! TEST. (edited)"
-
-If no, then on immediate/accidental exit failed to do local commit. (If that so, there could be many reasons, such as , it takes longer time to trigger by current codebase edition etc.)
+If that so, then you will need to remove that commit on exit portion from codebase entirely, right? And obsidian itself does that on disk write save. So no code needed for that right. So only task is of removing right? So in the workflow, only two actions remains, onboot action behaviour and FAB's action behaviours only. Right? If that so , change in Documentations needed as well. I.e. Report file, Those two GIT_SYNC.. files.
