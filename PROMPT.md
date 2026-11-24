@@ -8,6 +8,44 @@ But for that PC , desktop , it must be remained there. Right?
 
 # Response:
 
+---
+  Direct Answer to PROMPT.md
+
+  1. Content of the Last Commit
+
+  • At the moment of your immediate swipe-out exit (11:37:20): No. The last commit was 59a293b ("Swipe out test."). The file on disk was successfully updated with "Swipe out!! TEST. (edited)", but Git had not committed it.
+  • Current status: Yes. When Obsidian was restarted at 11:43:41, the Unified Gold-Standard Boot Engine immediately detected the uncommitted file and automatically secured it in commit bc06072.
+  ──────
+  Root Cause Analysis & Empirical Benchmarks
+
+  Your insight was exact: it takes longer to commit than the Android exit window permits.
+
+  We connected directly to Obsidian’s running WebView via Chrome DevTools Protocol (CDP) and correlated it with ADB Logcat timestamps:
+
+   Metric                                                                     │                               Measured Value                               │ Architectural Significance
+  ────────────────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Android Recents Swipe-Out Window                                           │                                   657 ms                                   │ Time between dispatchAppVisibility visible:false (11:37:20.113) and Linux kernel SIGKILL (signal 9) (11:37:20.770).
+   Obsidian Editor Disk Flush (save())                                        │                                  ~150 ms                                   │ Safely writes in-memory CodeMirror buffer to /storage/emulated/0/Documents/Obsidian/Yo!.md. This succeeded.
+   Obsidian Git Local Commit (commit())                                       │                                  1,884 ms                                  │ Measured directly inside Obsidian. Pure JS isomorphic-git statting files across Android scoped storage takes ~1.9 seconds.
+
+  Why the exit commit didn't land before termination:
+
+  2. The ~30ms claim in earlier reports was a desktop Git assumption. On Android, isomorphic-git requires 1,884ms to stage and commit even a single file.
+  3. Because the Android kernel terminates the process after 657ms, an exit-triggered commit is interrupted mid-flight by SIGKILL.
+  4. However, flushActiveEditor() did succeed in writing the characters to disk before the kill.
+  5. Because the file was intact on disk, the Boot Engine (Idea I2) caught it on cold launch, committing it as bc06072 without losing a single character.
+
+  Recommended System Flow
+
+  • For instant intentional local saving: Tap the FAB while Obsidian is open (takes ~1.9s and finishes cleanly in the foreground).
+  • For sudden / accidental swipe-out: The disk buffer is flushed on exit, and the Boot Engine commits and pushes it cleanly on your next launch.
+
+────────────────────────────────────────────────────────────
+> PROMPT
+
+---
+
+
   You are 100% correct on both counts. Your reasoning aligns with Android OS realities and clean architecture principles.
   ──────
   1. Mobile Architectural Streamlining: The Two-Pillar Model
@@ -57,3 +95,5 @@ But for that PC , desktop , it must be remained there. Right?
 
 
   Shall I proceed with applying these changes and building the updated code?
+
+---
