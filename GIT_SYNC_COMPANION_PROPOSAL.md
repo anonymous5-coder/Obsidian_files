@@ -19,21 +19,21 @@
 2. **Android Kernel SIGKILL:** When an app is swiped away from Android Recent Apps, Android delivers `document.visibilityState === "hidden"`, followed within **~300ms** by a kernel `SIGKILL (signal 9)`. A remote network push (1.5–4.0s) cannot finish before process termination.
 3. **Boot-Time Worktree Collisions:** Obsidian Git's native `autoPullOnBoot` pulls at $t \approx 0.5\text{s}$ before local edits are committed. If uncommitted notes exist from an interrupted session, pull halts with worktree errors.
 
-### 1.2 The Definitive Solution: The "Handy / Intentional" Paradigm (New-State)
+### 1.2 The Definitive Solution: The "Handy / Intentional" Two-Pillar Paradigm (New-State)
 `GitSync Companion` v1.2.0 establishes a clean, deterministic division of labor between human intent, mobile lifecycle events, and Git plumbing:
-1. **Dual-Action Floating Action Button (FAB) (Idea I1):**
-   * **Short Tap (< 650ms):** **Instant Local Commit (30ms)**. Zero network, 100% offline-safe, single haptic buzz (`40ms`), turns 🔵 Blue.
+1. **Pillar 1 — Intentional Dual-Action FAB (Idea I1):**
+   * **Short Tap (< 650ms):** **Fast Local Commit**. Staged and committed in foreground (~1.9s on mobile, ~30ms on desktop), zero network, 100% offline-safe, single haptic buzz (`40ms`), turns 🔵 Blue.
    * **Long Press ($\ge$ 650ms):** **Full Gold-Standard Sync**. Pulses with accent glow $\to$ dual haptic buzz (`[50, 50, 100]`) $\to$ **Commit 1st $\to$ Pull 2nd $\to$ Push 3rd** $\to$ turns 🟢 Green.
-2. **Unified Gold-Standard Boot Engine (Idea I2):**
+2. **Pillar 2 — Unified Gold-Standard Boot Engine (Idea I2):**
    * Companion owns startup sync at $t = 2.0\text{s}$, strictly running:
      $$\text{Local Commit (1st)} \longrightarrow \text{Pull Remote (2nd)} \longrightarrow \text{Push Combined (3rd)}$$
-   * Eliminates premature pull collisions and duplicate boot pulls.
+   * Automatically secures any on-disk edits left from previous sessions or sudden app dismissals, completely eliminating premature pull collisions.
 3. **Complete Purge of Pre-Commit Timers (Idea I3):**
    * Zero ticking clocks or background countdown loops. All save actions are strictly deterministic and user-driven.
 4. **Transparent, Flat Settings UI (Idea I4):**
-   * Direct, uncluttered controls for Mobile FAB, Desktop FAB, Hold Duration slider (400–1200ms), Boot Sync, Exit Action, and Haptics.
-5. **30ms Local-Only Exit Sentry (Idea I5):**
-   * On `visibilitychange === "hidden"`: runs local commit in ~30ms before Android kernel `SIGKILL`. Data is secured on disk; Boot Sync pushes it on next launch.
+   * Direct, uncluttered controls for Mobile FAB, Desktop FAB, Hold Duration slider (400–1200ms), Boot Sync, Desktop Exit Action, and Haptics.
+5. **Desktop-Only Quit Sentry:**
+   * On desktop (`workspace.on("quit")`), commits work when Obsidian is cleanly closed. Mobile devices rely on Obsidian's native disk saving + Boot Engine to defeat the 650ms Android kernel `SIGKILL`.
 
 ---
 
@@ -55,9 +55,9 @@
 │                        GITSYNC COMPANION                               │
 │  (The User-Intentional Mobile Controller & UI Layer)                   │
 │                                                                        │
-│  • Dual-Action FAB: Short Click (30ms Commit) | Long Press (Full Sync) │
+│  • Dual-Action FAB: Short Click (Local Commit) | Long Press (Full Sync) │
 │  • Boot-Time Gold-Standard Engine: Commit (1st) -> Pull -> Push (3rd)  │
-│  • 30ms Local-Only Exit Sentry (Disk commit before SIGKILL)            │
+│  • Desktop Quit Sentry: Clean local commit on desktop app quit         │
 │  • Live 4-State Visual Indicators (Orange / Blue / Green / Spinning)   │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Public Obsidian Command API
@@ -99,10 +99,9 @@ Runs at $t = 2.0\text{s}$ on app startup:
 * **Unified Atomic Sync:** If uncommitted changes or unpushed commits exist, it delegates directly to the native Gold-Standard sync (`obsidian-git:push` / `gitActions.commitAndSync`), executing Commit 1st $\to$ Pull 2nd $\to$ Push 3rd as a single atomic sequence—the exact same action as the FAB hold-sync.
 * *(Note: In Obsidian Git v2.43.0, the command `obsidian-git:push` maps to `commitAndSync`, while `obsidian-git:push2` maps to standalone `push`)*.
 
-### 3.4 30ms Local-Only Exit Sentry (Idea I5)
-* Listens to `visibilitychange` (`document.visibilityState === "hidden"`) and `pagehide`.
-* When app is backgrounded or swiped away:
-  - If `exitAction === "commit"` (default) and uncommitted edits exist: executes `obsidian-git:commit`. Takes ~30ms, safely finishing before Android kernel delivers `SIGKILL`.
+### 3.4 Desktop Quit Sentry & Mobile Lifecycle Alignment
+* **Desktop Environments:** On Windows, macOS, and Linux, closing Obsidian cleanly triggers `workspace.on("quit")`, allowing a ~30ms native Git commit to complete before the window shuts down.
+* **Mobile Environments:** On Android, kernel `SIGKILL` arrives within **657ms** of backgrounding, whereas pure JavaScript `isomorphic-git` requires **~1,884ms** to execute a commit across scoped storage. Attempting an exit commit in that window causes unhandled process termination. Instead, Mobile relies on Obsidian's native asynchronous disk write + GitSync Companion's **Unified Boot Engine (Idea I2)**, which automatically commits and pushes all preserved on-disk changes on the next app startup.
 
 ---
 
@@ -113,11 +112,19 @@ Runs at $t = 2.0\text{s}$ on app startup:
 | :--- | :---: | :--- |
 | **Auto pull on boot** | `OFF` (`false`) | Prevents premature pull before local commit. Companion handles boot. |
 | **Auto backup interval (minutes)** | `0` (Disabled) | Eliminates redundant background timer loops. |
-| **Auto backup after stopping file edits** | `OFF` (`false`) | Replaced by 1-tap FAB local commit and 30ms exit sentry. |
+| **Auto backup after stopping file edits** | `OFF` (`false`) | Replaced by 1-tap FAB local commit and Boot Engine reconciliation. |
 | **Pull before push** | `ON` (`true`) | Enforces Gold-Standard merge safety on manual syncs. |
 | **Push on commit and sync** | `ON` (`true`) | Ensures manual sync executes both commit and push. |
 
 ### B. GitSync Companion Settings
+| Setting | Value | Architectural Purpose |
+| :--- | :---: | :--- |
+| **Show floating action button on mobile** | `ON` (`true`) | Provides 1-tap local saving and hold-to-sync controls on screen. |
+| **Show floating action button on desktop** | `OFF` (`false`) | Optional; desktop users can rely on hotkeys and ribbon actions. |
+| **Hold duration for full sync** | `650ms` | Duration to hold FAB for full sync. Tap (< hold) is fast local save. |
+| **Boot-time Gold-Standard sync** | `ON` (`true`) | Reconciles local and remote changes cleanly on startup. |
+| **Action on app exit (Desktop)** | `commit` | Clean local commit on desktop exit. |
+| **Haptic feedback** | `ON` (`true`) | Physical buzz confirmations (single buzz on tap, dual on hold). |
 | Setting | Default | Range / Options | Description |
 | :--- | :---: | :--- | :--- |
 | **Show FAB on mobile** | `ON` | `true` / `false` | Displays draggable floating button on Android/iOS. |

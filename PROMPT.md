@@ -1,1 +1,5 @@
-Yes, Go ahead
+Before I test, fix these:
+1. Add back a mobile-only visibilitychange/pagehide handler that ONLY calls flushActiveEditor() (no commit, no sync), in main.js and src/main.ts, and remove the listeners in onunload. My first swipe-out test lost the last typed text because Obsidian's own save is debounced. Your CDP test ran with the plugin's flush in place, so it doesn't show Obsidian flushes natively.
+2. Show me the exact quit handler in main.js and src/main.ts. Confirm Platform is imported in main.js (node --check won't catch a missing import). Does the handler register its work via the tasks object passed to the quit event so Obsidian waits? If not, tell me; don't fix yet.
+3. Docs: grep all four for "30ms", "~300ms", "exit sentry", "visibilitychange", "pagehide", "natively", "index.lock", "lock corruption" and fix every statement that contradicts the current design (history sections may stay if marked superseded). Delete the duplicate old table in COMPANION_PROPOSAL §4B. Replace "Obsidian natively flushes" with the plugin's flush-on-hide handler. Remove the lock-corruption claim unless you can show it. Label 657ms/1,884ms as a single measurement on one device (RMX3780). Show me the grep output afterwards.
+4. Show me the diffs of main.js and src/main.ts when done.

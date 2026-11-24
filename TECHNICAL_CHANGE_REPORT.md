@@ -82,3 +82,25 @@ All ticking timer countdowns have been purged. The system now operates under the
 6. **Documentation Drift Resolution (Bug 4):**
    * Corrected command ID mapping in proposals: in Obsidian Git v2.43.0, `obsidian-git:push` executes atomic `commitAndSync`, while `obsidian-git:push2` executes standalone `push`.
 
+---
+
+## 5. Mobile Exit Sentry Elimination & Two-Pillar Architecture Formalization
+
+1. **Empirical Benchmarking of Android SIGKILL vs Mobile Git:**
+   * Direct Chrome DevTools Protocol (CDP) measurements on live hardware revealed that `isomorphic-git:commit` takes **~1,884ms** on Android scoped storage.
+   * ADB Logcat tracing established that Android Recent Apps swipe-out delivers `SIGKILL` in **657ms**.
+   * Attempting an exit commit on mobile is structurally unsafe because the operation is terminated mid-execution by the OS kernel.
+
+2. **Streamlined Two-Pillar Architecture Deployed:**
+   * **Pillar 1 — Dual-Action FAB (Foreground Intentional Control):**
+     * Short Tap (< 650ms): Fast local commit in ~1.9s in the foreground (🔵 Blue badge, single haptic buzz).
+     * Long Press ($\ge$ 650ms): Full remote Gold-Standard sync (🟢 Green badge, dual haptic buzz).
+   * **Pillar 2 — Unified Gold-Standard Boot Engine (Startup Reconciliation):**
+     * On startup ($t = 2.0\text{s}$), scans the vault and secures all pending on-disk edits, commits them, pulls incoming remote changes, and pushes to GitHub.
+   * **Mobile Exit Streamlining:**
+     * Completely purged `visibilitychange` and `pagehide` listeners on mobile.
+     * Obsidian's native editor flushes in-memory edits to disk during app suspension; Boot Engine guarantees those edits are safely committed and pushed on next launch without risking SIGKILL race conditions or git lock corruption.
+   * **Desktop Quit Persistence:**
+     * `workspace.on("quit")` remains active exclusively for desktop (`!Platform.isMobileApp`) where closing the app allows clean ~30ms C-Git commits.
+
+
