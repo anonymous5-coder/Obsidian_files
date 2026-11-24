@@ -53,3 +53,32 @@ All ticking timer countdowns have been purged. The system now operates under the
   * **Documentation Synchronization:** `GIT_SYNC_ARCHITECTURE_PROPOSAL.md`, `GIT_SYNC_COMPANION_PROPOSAL.md`, and `TECHNICAL_CHANGE_REPORT.md` fully synchronized.
 
 *Ready for user plugin re-activation and physical device verification.*
+
+---
+
+## 4. Reliability Hardening & Edge-Case Bug Resolution
+
+1. **Airplane Mode / Offline Lock Defeated (Bug 1):**
+   * Sync operations now await the callback of `gitPlugin.promiseQueue.addTask(() => gitPlugin.gitActions.commitAndSync(...))`.
+   * When offline, obsidian-git's network error handler catches the failure, and `addTask` finishes. The `finally` block guarantees `isSyncing = false` is always cleared.
+   * If local commits exist unpushed, the FAB ends 🔵 Blue (`canPush() === true`); if the vault was already fully clean and up to date, it ends 🟢 Green.
+   * FAB never gets stuck spinning or swallowing touches.
+
+2. **Async `flushActiveEditor()` Buffer Safety (Bug 2):**
+   * `MarkdownView.save()` is asynchronous. `flushActiveEditor()` is now `async` and awaited across `triggerLocalCommit`, `triggerCommitAndSync`, `visibilitychange`, and `pagehide`.
+   * Guarantees that keystrokes typed immediately before swiping out or tapping the FAB are flushed from RAM to disk before git stages the files.
+
+3. **Mid-Sync State Isolation (Bug 3):**
+   * `onGitRefsChanged()` now immediately exits if `this.isSyncing === true`.
+   * Prevents premature `refs-changed` / `head-change` events (fired after the local commit phase) from flipping the FAB to 🔵 Blue while `pull` and `push` are still in flight.
+
+4. **In-Flight Keystroke Preservation:**
+   * Tracks `hasEditsDuringSync`. If the user types in the editor while a sync is executing, the FAB correctly transitions to 🟠 Orange (`dirty`) when sync finishes, preserving awareness of unsynced new edits.
+
+5. **Unified Native Boot Engine Alignment:**
+   * `runBootSync()` performs pre-flight checks and delegates directly to `triggerCommitAndSync("boot-sync")`.
+   * Uses the exact same native atomic `commitAndSync` pipeline as the FAB hold action. Purged nonexistent `pushChanges()`.
+
+6. **Documentation Drift Resolution (Bug 4):**
+   * Corrected command ID mapping in proposals: in Obsidian Git v2.43.0, `obsidian-git:push` executes atomic `commitAndSync`, while `obsidian-git:push2` executes standalone `push`.
+

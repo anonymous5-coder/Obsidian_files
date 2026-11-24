@@ -95,9 +95,9 @@
 
 ### 3.3 Unified Gold-Standard Boot Sequence (Idea I2)
 Runs at $t = 2.0\text{s}$ on app startup:
-1. **Commit Local 1st:** Scans `gitManager.status()`. If uncommitted edits exist from a previous interrupted session or external edit, commits them locally (`obsidian-git:commit`).
-2. **Pull Remote 2nd:** Fetches remote changes from AI agents (`obsidian-git:pull`). Because local edits were committed in Step 1, incoming changes merge cleanly without worktree collisions.
-3. **Push Combined 3rd:** If unpushed commits exist (`canPush()`), pushes combined history to GitHub (`obsidian-git:push2`).
+* **Pre-flight Check:** Scans `gitManager.status()` and `gitManager.canPush()`. If vault is completely clean and up to date, it silently exits without unnecessary network chatter.
+* **Unified Atomic Sync:** If uncommitted changes or unpushed commits exist, it delegates directly to the native Gold-Standard sync (`obsidian-git:push` / `gitActions.commitAndSync`), executing Commit 1st $\to$ Pull 2nd $\to$ Push 3rd as a single atomic sequence—the exact same action as the FAB hold-sync.
+* *(Note: In Obsidian Git v2.43.0, the command `obsidian-git:push` maps to `commitAndSync`, while `obsidian-git:push2` maps to standalone `push`)*.
 
 ### 3.4 30ms Local-Only Exit Sentry (Idea I5)
 * Listens to `visibilitychange` (`document.visibilityState === "hidden"`) and `pagehide`.

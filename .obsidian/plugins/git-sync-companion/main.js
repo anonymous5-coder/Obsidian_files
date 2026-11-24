@@ -29,6 +29,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     this.isDirty = false;
     this.isCommittedLocally = false;
     this.isSyncing = false;
+    this.hasEditsDuringSync = false;
 
     this.fabEl = null;
     this.successResetTimer = null;
@@ -62,42 +63,32 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     this.registerEvent(this.app.vault.on("rename", () => this.onVaultChange("rename")));
     this.registerEvent(this.app.workspace.on("editor-change", () => this.onVaultChange("editor")));
 
-    // Helper: Flush active editor in-memory buffer to disk
-    this.flushActiveEditor = () => {
-      try {
-        const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (activeView && typeof activeView.save === "function") {
-          activeView.save();
-        }
-      } catch (e) {}
-    };
-
     // 4. Hook obsidian-git events for visual badge updates
     this.registerEvent(this.app.workspace.on("obsidian-git:refs-changed", () => this.onGitRefsChanged()));
     this.registerEvent(this.app.workspace.on("obsidian-git:head-change", () => this.onGitRefsChanged()));
 
     // 5. 30ms Local-Only Exit Sentry (Android App Switch, Screen Lock, Minimize, Swipe-Out)
-    this.handleVisibilityChange = () => {
+    this.handleVisibilityChange = async () => {
       if (document.visibilityState === "hidden") {
-        this.flushActiveEditor();
+        await this.flushActiveEditor();
         if (this.settings.exitAction === "commit" && this.isDirty) {
           console.log("[GitSync Companion] App hidden with pending edits. Running 30ms local commit sentry...");
-          this.triggerLocalCommit("lifecycle-exit");
+          await this.triggerLocalCommit("lifecycle-exit");
         } else if (this.settings.exitAction === "sync" && (this.isDirty || this.isCommittedLocally)) {
           console.log("[GitSync Companion] App hidden. Triggering full remote sync...");
-          this.triggerCommitAndSync("lifecycle-exit");
+          await this.triggerCommitAndSync("lifecycle-exit");
         }
       }
     };
 
-    this.handlePageHide = () => {
-      this.flushActiveEditor();
+    this.handlePageHide = async () => {
+      await this.flushActiveEditor();
       if (this.settings.exitAction === "commit" && this.isDirty) {
         console.log("[GitSync Companion] Pagehide event. Running 30ms local commit sentry...");
-        this.triggerLocalCommit("pagehide");
+        await this.triggerLocalCommit("pagehide");
       } else if (this.settings.exitAction === "sync" && (this.isDirty || this.isCommittedLocally)) {
         console.log("[GitSync Companion] Pagehide event. Triggering full remote sync...");
-        this.triggerCommitAndSync("pagehide");
+        await this.triggerCommitAndSync("pagehide");
       }
     };
 
@@ -120,11 +111,12 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     window.addEventListener("resize", this.handleResize);
 
     this.registerEvent(
-      this.app.workspace.on("quit", () => {
+      this.app.workspace.on("quit", async () => {
+        await this.flushActiveEditor();
         if (this.settings.exitAction === "commit" && this.isDirty) {
-          this.triggerLocalCommit("desktop-quit");
+          await this.triggerLocalCommit("desktop-quit");
         } else if (this.settings.exitAction === "sync" && (this.isDirty || this.isCommittedLocally)) {
-          this.triggerCommitAndSync("desktop-quit");
+          await this.triggerCommitAndSync("desktop-quit");
         }
       })
     );
@@ -139,36 +131,55 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     });
   }
 
+  // Helper: Flush active editor in-memory buffer to disk
+  async flushActiveEditor() {
+    try {
+      const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (activeView && typeof activeView.save === "function") {
+        await activeView.save();
+      }
+    } catch (e) {}
+  }
+
   onVaultChange(type) {
     this.isDirty = true;
     this.isCommittedLocally = false;
-    this.syncState = "dirty";
-    this.updateFabUI();
+    if (this.isSyncing) {
+      this.hasEditsDuringSync = true;
+    } else {
+      this.syncState = "dirty";
+      this.updateFabUI();
+    }
   }
 
   // Idea I1 & I5: Fast Local Commit (30ms, Zero Network, 100% Offline Durability)
   async triggerLocalCommit(source = "manual") {
     if (this.isSyncing) return;
-    this.flushActiveEditor();
+    await this.flushActiveEditor();
 
     const gitPlugin = this.app.plugins?.getPlugin("obsidian-git");
     if (!gitPlugin) return;
 
     try {
       console.log(`[GitSync Companion] Fast local commit (${source})...`);
-      const executed = this.app.commands.executeCommandById("obsidian-git:commit");
-      if (!executed && gitPlugin.gitActions?.commit) {
-        await gitPlugin.promiseQueue.addTask(() =>
-          gitPlugin.gitActions.commit({ fromAuto: true, mode: "all" })
-        );
-      }
+      await new Promise((resolve) => {
+        if (gitPlugin.promiseQueue?.addTask && gitPlugin.gitActions?.commit) {
+          gitPlugin.promiseQueue.addTask(
+            () => gitPlugin.gitActions.commit({ fromAuto: true, mode: "all" }),
+            (res) => resolve(res)
+          );
+        } else {
+          this.app.commands.executeCommandById("obsidian-git:commit");
+          resolve(null);
+        }
+      });
 
       this.isDirty = false;
       this.isCommittedLocally = true;
       this.syncState = "committed";
       this.updateFabUI();
 
-      if (source !== "lifecycle-exit" && source !== "pagehide") {
+      if (source !== "lifecycle-exit" && source !== "pagehide" && source !== "desktop-quit") {
         new Notice("GitSync: Saved locally (30ms)", 1500);
       }
     } catch (err) {
@@ -182,9 +193,10 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
       console.log(`[GitSync Companion] Sync already in progress, ignoring trigger from ${source}.`);
       return;
     }
-    this.flushActiveEditor();
+    await this.flushActiveEditor();
 
     this.isSyncing = true;
+    this.hasEditsDuringSync = false;
     this.syncState = "syncing";
     this.updateFabUI();
 
@@ -199,26 +211,51 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
 
     try {
       new Notice("GitSync: Syncing with GitHub...", 2000);
-      // obsidian-git:push executes commitAndSync (Commit 1st -> Pull 2nd -> Push 3rd)
-      const executed = this.app.commands.executeCommandById("obsidian-git:push");
-      if (!executed) {
-        if (gitPlugin.gitActions?.commitAndSync) {
-          await gitPlugin.promiseQueue.addTask(() =>
-            gitPlugin.gitActions.commitAndSync({ fromAutoBackup: source.startsWith("lifecycle") })
+      // Run atomic commitAndSync inside obsidian-git's serial promiseQueue
+      await new Promise((resolve) => {
+        if (gitPlugin.promiseQueue?.addTask && gitPlugin.gitActions?.commitAndSync) {
+          gitPlugin.promiseQueue.addTask(
+            () => gitPlugin.gitActions.commitAndSync({ fromAutoBackup: source.startsWith("lifecycle") }),
+            (res) => resolve(res)
           );
         } else {
-          throw new Error("Unable to trigger obsidian-git sync.");
+          const executed = this.app.commands.executeCommandById("obsidian-git:push");
+          window.setTimeout(() => resolve(null), 1500);
         }
-      }
-
-      this.isDirty = false;
-      this.isCommittedLocally = false;
+      });
     } catch (err) {
       console.error("[GitSync Companion] Sync failed:", err);
       new Notice(`GitSync error: ${err.message || err}`, 4000);
+    } finally {
       this.isSyncing = false;
-      this.syncState = this.isDirty ? "dirty" : "idle";
-      this.updateFabUI();
+
+      // Check if user typed while sync was actively executing
+      if (this.hasEditsDuringSync) {
+        this.isDirty = true;
+        this.syncState = "dirty";
+        this.updateFabUI();
+      } else {
+        // No edits during sync. Check if local commits remain unpushed (e.g. airplane mode / offline)
+        let canPush = false;
+        try {
+          if (gitPlugin?.gitManager?.canPush) {
+            canPush = await gitPlugin.gitManager.canPush();
+          }
+        } catch (e) {}
+
+        if (canPush) {
+          // Unpushed commits exist -> Blue badge
+          this.isDirty = false;
+          this.isCommittedLocally = true;
+          this.syncState = "committed";
+          this.updateFabUI();
+        } else {
+          // Fully in sync with remote or nothing to push
+          this.isDirty = false;
+          this.isCommittedLocally = false;
+          this.showSuccessFeedback();
+        }
+      }
     }
   }
 
@@ -275,7 +312,10 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
   }
 
   async onGitRefsChanged() {
-    this.isSyncing = false;
+    // If GitSync Companion is actively running a sync operation,
+    // ignore intermediate events to avoid flipping FAB to blue mid-sync.
+    if (this.isSyncing) return;
+
     const gitPlugin = this.app.plugins?.getPlugin("obsidian-git");
 
     if (gitPlugin?.gitManager?.canPush) {
