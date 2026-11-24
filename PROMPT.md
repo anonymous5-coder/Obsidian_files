@@ -1,1 +1,3 @@
 If that so, then you will need to remove that commit on exit portion from codebase entirely, right? And obsidian itself does that on disk write save. So no code needed for that right. So only task is of removing right? So in the workflow, only two actions remains, onboot action behaviour and FAB's action behaviours only. Right? If that so , change in Documentations needed as well. I.e. Report file, Those two GIT_SYNC.. files.
+
+But for that PC , desktop , it must be remained there. Right?
