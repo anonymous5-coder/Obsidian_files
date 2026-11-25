@@ -33,3 +33,12 @@ Hey , auto commit worked on app switching, or turning obsidian to background. Yo
 Which is better and straight.
 
 I think reverting , and then doing specific edits is better.
+
+
+---
+
+My intention:  I just wanted to revert the commit of that point, before on exit behaviour was removed. Then again operating on it to remove  exit behaviour partially, keeping local commit behaviour by switching app or in background app behaviour only. And keeping all those things for  or pc. 
+
+---
+
+Continuation idea and prompting for agy (antigravity cli) cancelled. I want to send prompt to new context window of devx.
