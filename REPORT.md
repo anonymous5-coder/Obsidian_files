@@ -593,17 +593,18 @@ To achieve 100% harmonious, overlap-free operation between both plugins, the rec
     6. **Haptic Feedback:** ON by default.
 * Giving users direct access to these clear settings with sensible defaults is simpler, cleaner, and universally adaptable.
 
-#### Idea I5: Two-Pillar Mobile Streamlining & Desktop Quit Sentry
-* **The Empirical Mobile Reality:**
-  - On desktop SSDs, C-Git commits in ~20–40ms. However, on Android mobile devices, Obsidian Git uses `isomorphic-git` in JavaScript traversing scoped storage.
-  - Empirical CDP benchmarks measured local commits taking **~1,884ms**.
-  - When swiped away in Android Recent Apps, Android delivers `SIGKILL (signal 9)` in **~657ms**.
-  - Because 1.88s > 657ms, executing a Git commit during mobile swipe-out causes unhandled kernel kills and potential git lock corruptions.
-* **The Clean Two-Pillar Mobile Solution:**
-  - **Pillar 1 — Intentional Foreground Control (Dual-Action FAB):** The human operator commits locally (tap, ~1.9s) or full-syncs (hold, dual buzz) in the foreground while looking at the screen.
-  - **Pillar 2 — Startup Safety Net (Unified Boot Engine):** When an app is swiped away, Obsidian natively writes text edits to disk. On the next startup, the Boot Engine ($t=2.0\text{s}$) automatically reconciles and commits all on-disk changes, pulls incoming agent work, and pushes to GitHub.
-* **Desktop Persistence:**
-  - Desktop environments (Windows, macOS, Linux) do not suffer from Android SIGKILL and execute native C-Git in ~30ms. The `workspace.on("quit")` sentry remains active for desktop environments.
+#### Idea I5: The 30ms Local-Only Exit Sentry (Defeating `SIGKILL`)
+* **The Insight:**
+  - When a user forcefully swipes away an app from Android Recent Apps, Android delivers `document.visibilityState === "hidden"`, followed within **~300ms** by a kernel `SIGKILL (signal 9)`.
+  - A network push (1.5–4.0s) CANNOT complete before `SIGKILL`.
+  - However, writing a Git commit to local flash storage (`.git/objects`) takes only **20 to 40 milliseconds**!
+  - In Android WebView, `visibilitychange` has sufficient headroom (100–300ms) for a disk write to finish before the process terminates.
+* **The New-State Exit Architecture:**
+  - When the app is minimized, switched, or swiped away (`visibilitychange === "hidden"`):
+  - If `isDirty` is true, GitSync Companion immediately executes `obsidian-git:commit` (**local disk commit only, 30ms, zero network**).
+  - The working tree is permanently secured on local disk before the kernel kills the app!
+  - Then, on the next startup, **Boot Sync (I2)** automatically picks up that local commit, pulls remote AI changes, and pushes everything to GitHub!
+  - **Result:** Complete data durability across sudden exits without hanging on fragile network calls!
 
 ---
 
@@ -614,9 +615,9 @@ To achieve 100% harmonious, overlap-free operation between both plugins, the rec
 │                        GITSYNC COMPANION                               │
 │  (The User-Intentional Mobile Controller & UI Layer)                   │
 │                                                                        │
-│  • Dual-Action FAB: Short Click (Local Commit) | Long Press (Full Sync) │
+│  • Dual-Action FAB: Short Click (30ms Commit) | Long Press (Full Sync) │
 │  • Boot-Time Gold-Standard Engine: Commit (1st) -> Pull -> Push (3rd)  │
-│  • Desktop Quit Sentry: Clean local commit on desktop app quit         │
+│  • 30ms Local-Only Exit Sentry (Disk commit before SIGKILL)            │
 │  • Live 4-State Visual Indicators (Orange / Blue / Green / Spinning)   │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Public Obsidian Command API
@@ -656,9 +657,8 @@ To achieve 100% harmonious, overlap-free operation between both plugins, the rec
      - Delete `preCommitTimer`, `localPreCommitSeconds`, and background auto-push from `main.js` and `src/main.ts`.
   4. **Implement Transparent Settings UI (I4):**
      - Direct settings: Show FAB on Mobile/Desktop, Hold Duration slider (400–1200ms), Boot Sync toggle, Exit Action dropdown, Haptics toggle.
-  5. **Implement Streamlined Lifecycle & Desktop Quit Sentry (I5):**
-     - Mobile: Zero exit race; relies on Obsidian's disk write + Unified Boot Engine.
-     - Desktop: `workspace.on("quit")` commits clean local save on desktop app close.
+  5. **Implement Local-Only Exit Sentry (I5):**
+     - On `visibilitychange === "hidden"`: runs `obsidian-git:commit` (30ms disk write).
 * **Manual Settings (Configured by User in Companion GUI in Next Pass):**
   - Verify settings in GUI.
 

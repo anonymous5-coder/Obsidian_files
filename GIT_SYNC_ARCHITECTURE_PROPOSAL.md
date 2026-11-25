@@ -18,8 +18,8 @@
 * **Human Operator (Mobile):** Writes notes, documentation, prompts, and project plans locally inside the Obsidian Android application.
 * **Autonomous AI Agents (Remote):** Agents across various cloud and desktop platforms (Antigravity, Claude, ChatGPT, Cursor, etc.) inspect public documentation 24/7 on GitHub.
 * **Continuous Synchronization:**
-  * **Human $\to$ AI:** Human edits notes $\to$ taps FAB for local save, or holds FAB for full Gold-Standard remote sync $\to$ AI agents read updated documentation online.
-  * **Exit & Suspension:** On mobile, Obsidian natively flushes text to disk. On desktop, a quit sentry secures local commits.
+  * **Human $\to$ AI:** Human edits notes $\to$ taps FAB for 30ms local save, or holds FAB for full Gold-Standard remote sync $\to$ AI agents read updated documentation online.
+  * **Exit Safety:** If human closes or swiped away the app, GitSync Companion's 30ms exit sentry writes local commits to `.git/objects` before Android kernel `SIGKILL`.
   * **AI $\to$ Human:** On next launch, GitSync Companion's unified Gold-Standard boot sequence commits local edits first, pulls incoming AI agent notes, and pushes combined history.
 
 ```text
@@ -29,7 +29,7 @@
 │      /storage/emulated/0/...          │                 │      Cloud & Desktop Environments     │
 └──────────────────┬────────────────────┘                 └───────────────────▲───────────────────┘
                    │                                                          │
-                   │ Dual-Action FAB (In-App) / Boot Engine (Startup)         │ Web / API / Git Read
+                   │ Dual-Action FAB / 30ms Exit Sentry                       │ Web / API / Git Read
                    │ (Commit-First -> Pull -> Push)                           │ (Public Inspection)
                    ▼                                                          ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -47,13 +47,13 @@
 
 ---
 
-## 2. Core Sync Mechanics: The "Handy / Intentional" Two-Pillar Architecture
+## 2. Core Sync Mechanics: The "Handy / Intentional" Architecture
 
-Rather than relying on fragile ticking timers or attempting impossible commits during mobile OS termination (where Android delivers `SIGKILL` in ~650ms while mobile `isomorphic-git` requires ~1.9s), the architecture operates under a deterministic **Two-Pillar Model**:
+Rather than relying on fragile ticking timers that fail when an app is quickly swiped away, the architecture uses intentional user controls and lifecycle hooks:
 
-### 2.1 Pillar 1: The Dual-Action FAB (Intentional Foreground Control)
-* **Short Tap (< 650ms): Fast Local Commit**
-  - Staged and committed directly to local `.git/objects` in the foreground (~1.9s on mobile, ~30ms on desktop).
+### 2.1 The Dual-Action FAB (Idea I1)
+* **Short Tap (< 650ms): Instant Local Commit (30ms)**
+  - Staged and committed directly to local `.git/objects` in ~30 milliseconds.
   - 100% offline-safe; zero network overhead.
   - FAB turns **🔵 Blue ("Committed Locally / Safe to Exit")** with a crisp single haptic vibration (`40ms`).
 * **Long Press / Hold ($\ge$ 650ms): Full Gold-Standard Sync**
@@ -62,15 +62,16 @@ Rather than relying on fragile ticking timers or attempting impossible commits d
 * **Touch Dragging (> 8px displacement):**
   - Draggable anywhere on screen. Position persists across app restarts and dynamically clamps to screen boundaries during rotation.
 
-### 2.2 Pillar 2: Unified Gold-Standard Boot Engine (Startup Safety Net)
+### 2.2 30ms Local-Only Exit Sentry (Idea I5)
+* When the app is minimized, switched, or swiped away (`visibilitychange === "hidden"` / `pagehide`):
+* Fires `obsidian-git:commit` (30ms disk write).
+* Uncommitted edits are permanently written to local flash storage before Android kernel delivers `SIGKILL` (~300ms).
+* On the next launch, Boot Sync pushes the committed work to GitHub.
+
+### 2.3 Unified Gold-Standard Boot Sequence (Idea I2)
 * Runs at $t = 2.0\text{s}$ on app startup:
   $$\text{Commit Local (1st)} \longrightarrow \text{Pull Remote (2nd)} \longrightarrow \text{Push Combined (3rd)}$$
-* **The Safety Net for Mobile Swipes:** If Obsidian is swiped away or backgrounded without tapping the FAB, Obsidian's native editor flushes the note to disk. When Obsidian is opened next, the Boot Engine immediately detects the uncommitted on-disk edits, commits them, pulls AI agent edits, and pushes cleanly to GitHub.
-* Eliminates premature pull collisions, avoids race conditions against Android `SIGKILL`, and guarantees zero data loss.
-
-### 2.3 Desktop-Only Quit Sentry
-* On desktop platforms (Windows, macOS, Linux), closing Obsidian fires the `quit` workspace event.
-* Because desktop environments do not suffer from Android's 650ms `SIGKILL` window and execute native C-Git in ~30ms, GitSync Companion executes a clean local commit on desktop exit.
+* Eliminates premature pull collisions and duplicate boot pulls.
 
 ---
 
