@@ -24,4 +24,12 @@ Rules: don't git commit or push; don't restart Obsidian or reload the plugin; do
  - Drop the index.lock / lock-corruption claim unless you can show it. Drop "Two-Pillar": the design is FAB, boot sync, and exit commit with flush.
  - Boot sync = one native commitAndSync call, runs only at plugin load.
  - Keep the benchmark section. In TECHNICAL_CHANGE_REPORT replace section 5 with a short honest entry: removal was tried and reverted because commit-on-background works. Restore REPORT Idea I5 with the corrected numbers.
-5. Verify: node --check main.js; copy vault main.js to the repo and cmp; tsc --noEmit; grep -n for promiseQueue, hasEditsDuringSync, visibilitychange, pagehide, "quit" in main.js and src/main.ts; grep all four docs for "30ms", "~300ms", natively, Two-Pillar, index.lock, "lock corruption", purged and list each hit as file:line (current text or marked history). Show diff -u of vault main.js against the step-1 backup; print the line count first and show it in chunks if over 200 lines.
+1. Verify: node --check main.js; copy vault main.js to the repo and cmp; tsc --noEmit; grep -n for promiseQueue, hasEditsDuringSync, visibilitychange, pagehide, "quit" in main.js and src/main.ts; grep all four docs for "30ms", "~300ms", natively, Two-Pillar, index.lock, "lock corruption", purged and list each hit as file:line (current text or marked history). Show diff -u of vault main.js against the step-1 backup; print the line count first and show it in chunks if over 200 lines.
+
+# or this?? 
+
+Hey , auto commit worked on app switching, or turning obsidian to background. You removed it to, should you revert your changes completely or will you have to do the specific changes only(documentation may drift by that as well)
+
+Which is better and straight.
+
+I think reverting , and then doing specific edits is better.
