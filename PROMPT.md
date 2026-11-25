@@ -31,7 +31,7 @@ Swipe-out kills the process ~657ms after hide; a mobile commit takes ~1,884ms; f
 - Desktop: keep the original unguarded quit handler and the exitAction setting/options.
 
 ## Steps (code first, docs last)
-0. Inspect (read-only) and report in chat (not in a vault file): tools; build script?; `git cat-file -t 0ca69da 5442bd1 bc06072`; `git log --oneline -6`; `git status -s`; grep -c of visibilitychange, pagehide, promiseQueue, hasEditsDuringSync, "quit" in vault main.js, repo main.js, src/main.ts. Don't edit until reported.
+0. Inspect (read-only) and report in chat (not in a vault file): tools; build script?; for c in 0ca69da 5442bd1 bc06072; do git cat-file -t $c; done; `git log --oneline -6`; `git status -s`; grep -c of visibilitychange, pagehide, promiseQueue, hasEditsDuringSync, "quit" in vault main.js, repo main.js, src/main.ts. Don't edit until reported.
 1. Back up the current state to ~/backups/<timestamp>/ (outside the vault, new names, never overwrite): vault main.js, repo main.js, src/main.ts, src/settings.ts, the 4 docs.
 2. For each of the 5 vault files still showing the removal: `git restore --source=0ca69da --worktree -- <path>`. Skip files already restored.
 3. Vault main.js: remove the pagehide handler, its field and its onunload cleanup; nothing else.
