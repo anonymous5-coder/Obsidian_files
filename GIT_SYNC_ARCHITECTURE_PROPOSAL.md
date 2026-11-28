@@ -63,14 +63,16 @@ Rather than relying on fragile ticking timers that fail when an app is quickly s
   - Draggable anywhere on screen. Position persists across app restarts and dynamically clamps to screen boundaries during rotation.
 
 ### 2.2 Best-Effort Local Exit Commit (Idea I5)
-* When the app is minimized or switched (`visibilitychange === "hidden"`):
-* Runs a best-effort local commit. It completes on app switch/background but may be cut short by a swipe-out.
-* The flush saves the text first and Boot Sync commits leftovers on next launch.
+* When the app is minimized or switched (`visibilitychange === "hidden"` on mobile):
+* Runs a best-effort local commit. It completes on app switch/background (observed by the owner) but may be cut short by a swipe-out.
+* Empirical benchmarks (single measurements on Realme RMX3780): an isomorphic-git commit takes ~1,884ms on Android scoped storage, while a Recent Apps swipe-out delivers process termination via SIGKILL in ~657ms. (Desktop ~30ms is an estimate; desktop quit is not device-tested and does not register via `tasks`).
+* If a swipe-out cuts the commit mid-way, `flushActiveEditor()` has already saved note text from RAM to disk (~150ms), and Boot Sync commits the leftovers on next launch (observed recovery: commit `bc06072`).
+* Mobile commits on `visibilitychange` only; redundant `pagehide` is removed.
 
 ### 2.3 Unified Gold-Standard Boot Sequence (Idea I2)
-* Runs at $t = 2.0\text{s}$ on app startup:
+* Runs at $t = 2.0\text{s}$ on app startup via one atomic `commitAndSync` call per plugin load:
   $$\text{Commit Local (1st)} \longrightarrow \text{Pull Remote (2nd)} \longrightarrow \text{Push Combined (3rd)}$$
-* Eliminates premature pull collisions and duplicate boot pulls.
+* Eliminates premature pull collisions and duplicate boot pulls. Pre-flight checks skip network if the vault is clean and up to date.
 
 ---
 

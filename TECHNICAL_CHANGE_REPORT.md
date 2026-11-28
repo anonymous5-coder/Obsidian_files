@@ -11,7 +11,7 @@
 
 Per direct user directive, [`GIT_SYNC_ARCHITECTURE_PROPOSAL.md`](file:///storage/emulated/0/Documents/Obsidian/GIT_SYNC_ARCHITECTURE_PROPOSAL.md), [`GIT_SYNC_COMPANION_PROPOSAL.md`](file:///storage/emulated/0/Documents/Obsidian/GIT_SYNC_COMPANION_PROPOSAL.md), and the active codebase have been fully upgraded to the definitive **New-State** architecture formulated in Section 8 of `REPORT.md`.
 
-All ticking timer countdowns have been purged. The system now operates under the **"Handy / Intentional" paradigm**, combining an intentional Dual-Action Floating Action Button (FAB), a 30ms local exit sentry that defeats Android `SIGKILL`, and a unified Gold-Standard boot sequence.
+All ticking timer countdowns have been removed. The system now operates under the **"Handy / Intentional" paradigm**, combining an intentional Dual-Action Floating Action Button (FAB), a best-effort local exit commit on app switch/background, and a unified Gold-Standard boot sequence.
 
 ---
 
@@ -21,19 +21,19 @@ All ticking timer countdowns have been purged. The system now operates under the
    * Public GitHub repository (`anonymous5-coder/Obsidian_files`) provides 24/7 read access for external AI agents across any cloud or desktop platform.
    * Mobile Obsidian provides the local writing environment for the human operator.
 2. **Dual-Action Floating Action Button (FAB) (Idea I1):**
-   * **Short Tap (< 650ms):** Instant Local Commit only (`obsidian-git:commit`). Staged and committed in ~30ms; 100% offline-safe; single haptic buzz (`40ms`); turns 🔵 Blue.
+   * **Short Tap (< 650ms):** Instant Local Commit only (`obsidian-git:commit`). Zero network overhead, fast local commit (desktop ~30ms estimate; mobile ~1.9s single measurement, RMX3780); single haptic buzz (`40ms`); turns 🔵 Blue.
    * **Long Press ($\ge$ 650ms):** Full Gold-Standard Remote Sync (`obsidian-git:push`). Pulses with accent glow $\to$ dual haptic buzz (`[50, 50, 100]`) $\to$ **Commit 1st $\to$ Pull 2nd $\to$ Push 3rd** $\to$ turns 🟢 Green.
    * **Touch Dragging (> 8px displacement):** Smoothly draggable; coordinates persisted in `data.json`; clamped during screen rotation.
 3. **Unified Gold-Standard Boot Sequence (Idea I2):**
    * Runs at $t = 2.0\text{s}$ on app startup:
      $$\text{Commit Local (1st)} \longrightarrow \text{Pull Remote (2nd)} \longrightarrow \text{Push Combined (3rd)}$$
    * Eliminates premature pull collisions and duplicate boot pulls.
-4. **Complete Purge of Pre-Commit Timers (Idea I3):**
+4. **Complete Removal of Pre-Commit Timers (Idea I3):**
    * Zero ticking clocks. Vault modification listeners only update the dirty visual badge without countdown timers.
 5. **Transparent, Flat Settings UI (Idea I4):**
    * Direct toggles and sliders for Mobile FAB, Desktop FAB, Hold Duration slider (400–1200ms), Boot Sync, Exit Action, and Haptics.
-6. **30ms Local-Only Exit Sentry (Idea I5):**
-   * On `visibilitychange === "hidden"`: runs local commit in ~30ms before Android kernel delivers `SIGKILL` (~300ms).
+6. **Best-Effort Local Exit Commit (Idea I5):**
+   * On `visibilitychange === "hidden"`: runs a best-effort local commit. Completes on app switch/background (observed by the owner); may be cut short by a swipe-out (~657ms kill vs ~1.9s mobile commit, single measurements on RMX3780; desktop ~30ms estimate). Editor text is saved first via `flushActiveEditor()` and leftovers are committed on next launch by Boot Engine (observed recovery: commit `bc06072`).
 7. **Physical Credential Isolation:**
    * `Keys.md` relocated into local-only `private/Keys.md`, permanently excluded via `.gitignore`.
 
@@ -65,7 +65,7 @@ All ticking timer countdowns have been purged. The system now operates under the
    * FAB never gets stuck spinning or swallowing touches.
 
 2. **Async `flushActiveEditor()` Buffer Safety (Bug 2):**
-   * `MarkdownView.save()` is asynchronous. `flushActiveEditor()` is now `async` and awaited across `triggerLocalCommit`, `triggerCommitAndSync`, `visibilitychange`, and `pagehide`.
+   * `MarkdownView.save()` is asynchronous. `flushActiveEditor()` is now `async` and awaited across `triggerLocalCommit`, `triggerCommitAndSync`, and `visibilitychange`.
    * Guarantees that keystrokes typed immediately before swiping out or tapping the FAB are flushed from RAM to disk before git stages the files.
 
 3. **Mid-Sync State Isolation (Bug 3):**
@@ -81,4 +81,16 @@ All ticking timer countdowns have been purged. The system now operates under the
 
 6. **Documentation Drift Resolution (Bug 4):**
    * Corrected command ID mapping in proposals: in Obsidian Git v2.43.0, `obsidian-git:push` executes atomic `commitAndSync`, while `obsidian-git:push2` executes standalone `push`.
+
+---
+
+## 5. Mobile Exit Sentry Revert & Best-Effort Lifecycle Model
+
+1. **Attempted Removal in Commit `5442bd1`:**
+   * Based on empirical measurements showing `isomorphic-git:commit` takes **~1,884ms** while Recent Apps swipe-out kills the process via `SIGKILL` in **~657ms** (single measurements on Realme RMX3780), commit `5442bd1` removed mobile `visibilitychange` and `pagehide` exit handlers, attempting to adopt a strict "Two-Pillar" (FAB + Boot Sync) model.
+2. **Reversal to Best-Effort Model:**
+   * The removal was reverted because auto-commit on app switching and backgrounding actually works in practice (observed by the owner). Android does not immediately kill backgrounded applications during normal app switches or screen locks, giving sufficient time for the local commit to succeed.
+   * Only rapid Recent Apps swipe-out cuts the commit short (~657ms vs ~1.9s). In that edge case, `flushActiveEditor()` has already saved file contents to disk (~150ms), and the Boot Engine cleanly commits and pushes the leftovers on next startup (observed recovery: commit `bc06072`).
+   * The redundant `pagehide` handler was cleanly removed (mobile commits on `visibilitychange` only). Desktop `workspace.on("quit")` remains active (not device-tested; does not register via `tasks`).
+
 

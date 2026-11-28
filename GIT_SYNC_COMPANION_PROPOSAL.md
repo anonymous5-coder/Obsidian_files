@@ -16,7 +16,7 @@
 ### 1.1 The Core Mobile Problem
 `obsidian-git` is the de-facto standard Git plugin for Obsidian, but mobile users face three critical friction points:
 1. **The Timer Automation Fallacy:** Ticking timers (whether 60-second debounce or 6-second pre-commits) do not match human mobile habits. Users do not wait for timers; they jot down quick thoughts (5–20s) and immediately exit, switch apps, or pocket their phone.
-2. **Android Kernel SIGKILL:** When an app is swiped away from Android Recent Apps, Android delivers `document.visibilityState === "hidden"`, followed by an Android kernel `SIGKILL`. A remote network push cannot finish before process termination.
+2. **Mobile Lifecycle and Process Termination:** On mobile, an isomorphic-git commit takes ~1,884ms on scoped storage, while a Recent Apps swipe-out delivers process termination via SIGKILL in ~657ms (single measurements on Realme RMX3780; desktop ~30ms is an estimate). While network sync cannot complete before termination, local commits are best-effort: they complete during normal app switching/backgrounding (observed by the owner) and, if cut short by a swipe-out, the editor buffer flush preserves file content on disk for the boot sync to commit on next launch.
 3. **Boot-Time Worktree Collisions:** Obsidian Git's native `autoPullOnBoot` pulls at $t \approx 0.5\text{s}$ before local edits are committed. If uncommitted notes exist from an interrupted session, pull halts with worktree errors.
 
 ### 1.2 The Definitive Solution: The "Handy / Intentional" Paradigm (New-State)
@@ -100,9 +100,11 @@ Runs at $t = 2.0\text{s}$ on app startup:
 * *(Note: In Obsidian Git v2.43.0, the command `obsidian-git:push` maps to `commitAndSync`, while `obsidian-git:push2` maps to standalone `push`)*.
 
 ### 3.4 Best-Effort Local Exit Commit (Idea I5)
-* Listens to `visibilitychange` (`document.visibilityState === "hidden"`).
-* When app is backgrounded:
-  - If `exitAction === "commit"` (default) and uncommitted edits exist: executes a best-effort local commit. It completes on app switch/background but may be cut short by a swipe-out.
+* Listens to `visibilitychange` (`document.visibilityState === "hidden"`) on mobile. (Desktop uses workspace `quit` event; not device-tested, and does not register via `tasks`).
+* When app is backgrounded or switched:
+  - If `exitAction === "commit"` (default) and uncommitted edits exist: executes a best-effort local commit. It completes on app switch/background (observed by the owner) but may be cut short by a swipe-out.
+  - On swipe-out, Android terminates the process via SIGKILL in ~657ms (single measurement, Realme RMX3780) while a mobile commit takes ~1,884ms (desktop ~30ms is an estimate).
+  - Even if a swipe-out cuts the commit short, `flushActiveEditor()` has already saved editor text to disk, and the Boot Engine commits and syncs the leftovers on next startup (observed recovery: commit `bc06072`).
 
 ---
 
@@ -113,7 +115,7 @@ Runs at $t = 2.0\text{s}$ on app startup:
 | :--- | :---: | :--- |
 | **Auto pull on boot** | `OFF` (`false`) | Prevents premature pull before local commit. Companion handles boot. |
 | **Auto backup interval (minutes)** | `0` (Disabled) | Eliminates redundant background timer loops. |
-| **Auto backup after stopping file edits** | `OFF` (`false`) | Replaced by 1-tap FAB local commit and 30ms exit sentry. |
+| **Auto backup after stopping file edits** | `OFF` (`false`) | Replaced by 1-tap FAB local commit and best-effort exit sentry. |
 | **Pull before push** | `ON` (`true`) | Enforces Gold-Standard merge safety on manual syncs. |
 | **Push on commit and sync** | `ON` (`true`) | Ensures manual sync executes both commit and push. |
 
@@ -122,9 +124,9 @@ Runs at $t = 2.0\text{s}$ on app startup:
 | :--- | :---: | :--- | :--- |
 | **Show FAB on mobile** | `ON` | `true` / `false` | Displays draggable floating button on Android/iOS. |
 | **Show FAB on desktop** | `OFF` | `true` / `false` | Displays floating button on macOS/Windows/Linux. |
-| **Hold duration for full sync** | `650ms` | `400`–`1200ms` | Duration to hold FAB for full sync. Tap (< hold) is 30ms local save. |
-| **Boot-time Gold-Standard sync** | `ON` | `true` / `false` | Runs Commit 1st $\to$ Pull 2nd $\to$ Push 3rd on app launch. |
-| **Action on app exit / background** | `commit` | `commit` / `sync` / `disabled` | 30ms local commit ensures data durability before SIGKILL. |
+| **Hold duration for full sync** | `650ms` | `400`–`1200ms` | Duration to hold FAB for full sync. Tap (< hold) is a local commit. |
+| **Boot-time Gold-Standard sync** | `ON` | `true` / `false` | Runs Commit 1st $\to$ Pull 2nd $\to$ Push 3rd on app launch (one `commitAndSync` call). |
+| **Action on app exit / background** | `commit` | `commit` / `sync` / `disabled` | Best-effort local commit on app switch/background; boot sync recovers if swipe-out interrupts. |
 | **Haptic feedback** | `ON` | `true` / `false` | Single buzz on tap; dual buzz on full sync. |
 
 ---
