@@ -3,9 +3,9 @@ const { Plugin, PluginSettingTab, Setting, Notice, Platform, MarkdownView } = re
 const DEFAULT_SETTINGS = {
   showFabOnMobile: true,
   showFabOnDesktop: false,
-  holdDuration: 650, // ms hold threshold for full sync (tap < holdDuration is 30ms local commit)
+  holdDuration: 650, // ms hold threshold for full sync (tap < holdDuration is a local commit)
   bootSync: true, // unified Gold-Standard startup sync (Commit 1st -> Pull 2nd -> Push 3rd)
-  exitAction: "commit", // "commit" (30ms local disk commit before SIGKILL) | "sync" | "disabled"
+  exitAction: "commit", // "commit" (best-effort local disk commit before app may be killed) | "sync" | "disabled"
   hapticFeedback: true,
   fabPosition: { bottom: 85, right: 20 },
 };
@@ -67,12 +67,12 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("obsidian-git:refs-changed", () => this.onGitRefsChanged()));
     this.registerEvent(this.app.workspace.on("obsidian-git:head-change", () => this.onGitRefsChanged()));
 
-    // 5. 30ms Local-Only Exit Sentry (Android App Switch, Screen Lock, Minimize, Swipe-Out)
+    // 5. Local-Only Exit Sentry (App Switch, Screen Lock, Minimize, Swipe-Out)
     this.handleVisibilityChange = async () => {
       if (document.visibilityState === "hidden") {
         await this.flushActiveEditor();
         if (this.settings.exitAction === "commit" && this.isDirty) {
-          console.log("[GitSync Companion] App hidden with pending edits. Running 30ms local commit sentry...");
+          console.log("[GitSync Companion] App hidden with pending edits. Running local commit sentry...");
           await this.triggerLocalCommit("lifecycle-exit");
         } else if (this.settings.exitAction === "sync" && (this.isDirty || this.isCommittedLocally)) {
           console.log("[GitSync Companion] App hidden. Triggering full remote sync...");
@@ -81,19 +81,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
       }
     };
 
-    this.handlePageHide = async () => {
-      await this.flushActiveEditor();
-      if (this.settings.exitAction === "commit" && this.isDirty) {
-        console.log("[GitSync Companion] Pagehide event. Running 30ms local commit sentry...");
-        await this.triggerLocalCommit("pagehide");
-      } else if (this.settings.exitAction === "sync" && (this.isDirty || this.isCommittedLocally)) {
-        console.log("[GitSync Companion] Pagehide event. Triggering full remote sync...");
-        await this.triggerCommitAndSync("pagehide");
-      }
-    };
-
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
-    window.addEventListener("pagehide", this.handlePageHide);
 
     // Dynamic Orientation & Viewport Resize Clamping
     this.handleResize = () => {
@@ -152,7 +140,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     }
   }
 
-  // Idea I1 & I5: Fast Local Commit (30ms, Zero Network, 100% Offline Durability)
+  // Idea I1 & I5: Fast Local Commit (Zero Network, Offline Durability)
   async triggerLocalCommit(source = "manual") {
     if (this.isSyncing) return;
     await this.flushActiveEditor();
@@ -179,8 +167,8 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
       this.syncState = "committed";
       this.updateFabUI();
 
-      if (source !== "lifecycle-exit" && source !== "pagehide" && source !== "desktop-quit") {
-        new Notice("GitSync: Saved locally (30ms)", 1500);
+      if (source !== "lifecycle-exit" && source !== "desktop-quit") {
+        new Notice("GitSync: Saved locally", 1500);
       }
     } catch (err) {
       console.error("[GitSync Companion] Local commit failed:", err);
@@ -383,7 +371,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     }
   }
 
-  // Idea I1: The Dual-Action FAB (Short Tap = 30ms Commit, Long Press = Full Sync, Drag = Reposition)
+  // Idea I1: The Dual-Action FAB (Short Tap = Local Commit, Long Press = Full Sync, Drag = Reposition)
   initFab() {
     const shouldShow = Platform.isMobileApp
       ? this.settings.showFabOnMobile
@@ -398,7 +386,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
 
     const fab = document.createElement("div");
     fab.className = "gitsync-fab gitsync-fab-idle";
-    fab.setAttribute("aria-label", "GitSync: Tap to commit (30ms), Hold to full sync");
+    fab.setAttribute("aria-label", "GitSync: Tap to commit locally, Hold to full sync");
     fab.innerHTML = ICON_GIT_SYNC;
 
     const { bottom, right } = this.settings.fabPosition || { bottom: 85, right: 20 };
@@ -490,7 +478,7 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
         };
         this.saveSettings();
       } else if (wasHolding) {
-        // Short Tap: Local Commit Only (30ms)
+        // Short Tap: Local Commit Only
         if (this.settings.hapticFeedback && navigator.vibrate) {
           try {
             navigator.vibrate(40); // Single buzz for local commit
@@ -635,9 +623,6 @@ module.exports = class GitSyncCompanionPlugin extends Plugin {
     if (this.handleVisibilityChange) {
       document.removeEventListener("visibilitychange", this.handleVisibilityChange);
     }
-    if (this.handlePageHide) {
-      window.removeEventListener("pagehide", this.handlePageHide);
-    }
     if (this.handleResize) {
       window.removeEventListener("resize", this.handleResize);
     }
@@ -663,13 +648,13 @@ class GitSyncCompanionSettingTab extends PluginSettingTab {
 
     containerEl.createEl("h2", { text: "GitSync Companion Settings" });
     containerEl.createEl("p", {
-      text: "Handy mobile companion for Obsidian Git. Tap the button to save locally in ~30ms, hold to trigger a full remote sync. Protects edits on exit before Android SIGKILL.",
+      text: "Handy mobile companion for Obsidian Git. Tap the button to save locally, hold to trigger a full remote sync. Protects edits on exit before Android may kill the app.",
       cls: "setting-item-description",
     });
 
     new Setting(containerEl)
       .setName("Show floating action button on mobile")
-      .setDesc("Displays a draggable sync button on screen. Tap to commit locally (30ms), Hold to full sync.")
+      .setDesc("Displays a draggable sync button on screen. Tap to commit locally, Hold to full sync.")
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.showFabOnMobile).onChange(async (val) => {
           this.plugin.settings.showFabOnMobile = val;
@@ -691,7 +676,7 @@ class GitSyncCompanionSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Hold duration for full sync (ms)")
-      .setDesc("How long to hold the button to trigger a full remote sync (Commit 1st -> Pull 2nd -> Push 3rd). A quick tap (< hold duration) saves locally in ~30ms.")
+      .setDesc("How long to hold the button to trigger a full remote sync (Commit 1st -> Pull 2nd -> Push 3rd). A quick tap (< hold duration) saves locally.")
       .addSlider((slider) =>
         slider
           .setLimits(400, 1200, 50)
@@ -715,10 +700,10 @@ class GitSyncCompanionSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Action on app exit / background")
-      .setDesc("Choose what happens when Obsidian is minimized, switched, or closed. 'Local Commit Only' finishes in ~30ms before Android kernel SIGKILL.")
+      .setDesc("Choose what happens when Obsidian is minimized, switched, or closed. 'Local Commit Only' runs a local commit first; it completes on app switch/background but may be cut short by a swipe-out. The flush saves your text first and the boot sync commits leftovers on next launch.")
       .addDropdown((dropdown) =>
         dropdown
-          .addOption("commit", "Local Commit Only (Recommended - 30ms, SIGKILL-safe)")
+          .addOption("commit", "Local Commit Only (Recommended - best-effort local commit)")
           .addOption("sync", "Full Remote Sync (Commit & Push)")
           .addOption("disabled", "Disabled")
           .setValue(this.plugin.settings.exitAction || "commit")

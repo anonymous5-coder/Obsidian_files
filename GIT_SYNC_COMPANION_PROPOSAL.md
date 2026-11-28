@@ -16,13 +16,13 @@
 ### 1.1 The Core Mobile Problem
 `obsidian-git` is the de-facto standard Git plugin for Obsidian, but mobile users face three critical friction points:
 1. **The Timer Automation Fallacy:** Ticking timers (whether 60-second debounce or 6-second pre-commits) do not match human mobile habits. Users do not wait for timers; they jot down quick thoughts (5–20s) and immediately exit, switch apps, or pocket their phone.
-2. **Android Kernel SIGKILL:** When an app is swiped away from Android Recent Apps, Android delivers `document.visibilityState === "hidden"`, followed within **~300ms** by a kernel `SIGKILL (signal 9)`. A remote network push (1.5–4.0s) cannot finish before process termination.
+2. **Android Kernel SIGKILL:** When an app is swiped away from Android Recent Apps, Android delivers `document.visibilityState === "hidden"`, followed by an Android kernel `SIGKILL`. A remote network push cannot finish before process termination.
 3. **Boot-Time Worktree Collisions:** Obsidian Git's native `autoPullOnBoot` pulls at $t \approx 0.5\text{s}$ before local edits are committed. If uncommitted notes exist from an interrupted session, pull halts with worktree errors.
 
 ### 1.2 The Definitive Solution: The "Handy / Intentional" Paradigm (New-State)
 `GitSync Companion` v1.2.0 establishes a clean, deterministic division of labor between human intent, mobile lifecycle events, and Git plumbing:
 1. **Dual-Action Floating Action Button (FAB) (Idea I1):**
-   * **Short Tap (< 650ms):** **Instant Local Commit (30ms)**. Zero network, 100% offline-safe, single haptic buzz (`40ms`), turns 🔵 Blue.
+   * **Short Tap (< 650ms):** **Instant Local Commit**. Zero network, 100% offline-safe, single haptic buzz (`40ms`), turns 🔵 Blue.
    * **Long Press ($\ge$ 650ms):** **Full Gold-Standard Sync**. Pulses with accent glow $\to$ dual haptic buzz (`[50, 50, 100]`) $\to$ **Commit 1st $\to$ Pull 2nd $\to$ Push 3rd** $\to$ turns 🟢 Green.
 2. **Unified Gold-Standard Boot Engine (Idea I2):**
    * Companion owns startup sync at $t = 2.0\text{s}$, strictly running:
@@ -32,8 +32,8 @@
    * Zero ticking clocks or background countdown loops. All save actions are strictly deterministic and user-driven.
 4. **Transparent, Flat Settings UI (Idea I4):**
    * Direct, uncluttered controls for Mobile FAB, Desktop FAB, Hold Duration slider (400–1200ms), Boot Sync, Exit Action, and Haptics.
-5. **30ms Local-Only Exit Sentry (Idea I5):**
-   * On `visibilitychange === "hidden"`: runs local commit in ~30ms before Android kernel `SIGKILL`. Data is secured on disk; Boot Sync pushes it on next launch.
+5. **Best-Effort Local Exit Commit (Idea I5):**
+   * On `visibilitychange === "hidden"`: runs a best-effort local commit. It completes on app switch/background but may be cut short by a swipe-out; the flush saves the text first and Boot Sync commits leftovers on next launch.
 
 ---
 
@@ -55,9 +55,9 @@
 │                        GITSYNC COMPANION                               │
 │  (The User-Intentional Mobile Controller & UI Layer)                   │
 │                                                                        │
-│  • Dual-Action FAB: Short Click (30ms Commit) | Long Press (Full Sync) │
+│  • Dual-Action FAB: Short Click (Local Commit) | Long Press (Full Sync) │
 │  • Boot-Time Gold-Standard Engine: Commit (1st) -> Pull -> Push (3rd)  │
-│  • 30ms Local-Only Exit Sentry (Disk commit before SIGKILL)            │
+│  • Best-Effort Local Exit Commit (Best-effort disk commit on exit)     │
 │  • Live 4-State Visual Indicators (Orange / Blue / Green / Spinning)   │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Public Obsidian Command API
@@ -83,13 +83,13 @@
   * `touchmove`: if displacement $> 8\text{px}$, cancels hold timer, removes glow, and initiates smooth touch dragging.
   * `touchend`:
     - If dragging occurred: persists new $(bottom, right)$ coordinates to `data.json`.
-    - If finger released before hold timer: executes **Short Tap (30ms Local Commit)** and triggers single haptic buzz (`40ms`).
+    - If finger released before hold timer: executes **Short Tap (Local Commit)** and triggers single haptic buzz (`40ms`).
   * Hold Timer Trigger ($\ge 650\text{ms}$ while stationary): executes **Long Press (Full Remote Sync)**, triggers dual haptic buzz (`[50, 50, 100]`), and shows spinning sync animation.
 
 ### 3.2 Visual States & Color Codes
 * ⚪ **Dimmed / Idle (`.gitsync-fab-idle`):** Opacity 0.55. Vault clean; local repository in sync with GitHub remote.
 * 🟠 **Orange Badge (`.gitsync-fab-dirty`):** Uncommitted edits present in vault.
-* 🔵 **Blue Badge (`.gitsync-fab-committed`):** Changes committed locally to `.git/objects` (30ms). Safe to exit or swipe out!
+* 🔵 **Blue Badge (`.gitsync-fab-committed`):** Changes committed locally to `.git/objects`. Safe to exit or swipe out!
 * 🔄 **Rotating Spinner (`.gitsync-fab-syncing`):** Network push/pull actively executing via Obsidian Git.
 * 🟢 **Green Checkmark (`.gitsync-fab-success`):** Synced cleanly with GitHub remote!
 
@@ -99,10 +99,10 @@ Runs at $t = 2.0\text{s}$ on app startup:
 * **Unified Atomic Sync:** If uncommitted changes or unpushed commits exist, it delegates directly to the native Gold-Standard sync (`obsidian-git:push` / `gitActions.commitAndSync`), executing Commit 1st $\to$ Pull 2nd $\to$ Push 3rd as a single atomic sequence—the exact same action as the FAB hold-sync.
 * *(Note: In Obsidian Git v2.43.0, the command `obsidian-git:push` maps to `commitAndSync`, while `obsidian-git:push2` maps to standalone `push`)*.
 
-### 3.4 30ms Local-Only Exit Sentry (Idea I5)
-* Listens to `visibilitychange` (`document.visibilityState === "hidden"`) and `pagehide`.
-* When app is backgrounded or swiped away:
-  - If `exitAction === "commit"` (default) and uncommitted edits exist: executes `obsidian-git:commit`. Takes ~30ms, safely finishing before Android kernel delivers `SIGKILL`.
+### 3.4 Best-Effort Local Exit Commit (Idea I5)
+* Listens to `visibilitychange` (`document.visibilityState === "hidden"`).
+* When app is backgrounded:
+  - If `exitAction === "commit"` (default) and uncommitted edits exist: executes a best-effort local commit. It completes on app switch/background but may be cut short by a swipe-out.
 
 ---
 
