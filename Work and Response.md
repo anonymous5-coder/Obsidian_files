@@ -1443,8 +1443,332 @@ commit `bc06072`).
        95 +
        96 +
        97
+
+
 ● Bash(sed -n '525,550p' /storage/emulated/0/Documents/Obsidian/REPORT.md
 echo "---"
 sed -n '590,665p' /storage/emulated/0/Documents/Obsidian/REPORT.md) (ctrl+o to collapse)
   ⎿  <output +98 lines>
-       7. **Purge 6-Second Pre-Commit Timer (
+       3. **Purge 6-Second Pre-Commit Timer (I3):**
+          - Delete `preCommitTimer`, `localPreCommitSeconds`, and background auto-push from `main.js` and `src/main.ts`.
+       4. **Implement Transparent Settings UI (I4):**
+          - Direct settings: Show FAB on Mobile/Desktop, Hold Duration slider (400–1200ms), Boot Sync toggle, Exit Action dropdown, Haptics toggle.
+       5. **Implement Local-Only Exit Sentry (I5):**
+          - On `visibilitychange === "hidden"`: runs `obsidian-git:commit` (30ms disk write).
+     * **Manual Settings (Configured by User in Companion GUI in Next Pass):**
+       - Verify settings in GUI.
+
+     #### C. In Documentation: (ctrl+o to collapse)
+
+▾ Thought for 10s, 1.0k tokens
+  Target text specifies a definitive user-driven architecture in Section 8.2. Initial assumption assumed a traditional pipeline, but the diagram framework points toward user-centric control loops instead.
+
+  Section 8.3 refinements demand a dual-action interface separating local commits from full syncs, removing pre-commit timers entirely. Initial timing assumptions for local writes on mobile hardware show significant variance, requiring validation of best-effort exit triggers
+  against actual storage latency benchmarks.
+
+  Measured background timing shows mobile writes take nearly two seconds, easily outpacing the sub-second swipe-out kill window. Relying on background triggers handles normal app switching, while sudden terminations leave the raw state on disk for recovery during the next startup
+  routine. Transitioning to a single background visibility trigger eliminates redundant lifecycle events, ensuring fast local commits without network dependencies.
+
+● Bash(sed -n '565,590p' /storage/emulated/0/Documents/Obsidian/REPORT.md) (ctrl+o to collapse)
+  ⎿  <output +21 lines>
+       - Completely deletes `preCommitTimer`, `localPreCommitSeconds` slider, and background auto-push logic from `main.js` and `src/main.ts`.
+       - The codebase becomes ~70 lines lighter, cleaner, and strictly deterministic.
+
+     #### Idea I4: Transparent, Flat Settings (No Rigid Mode Presets)
+     * **Architectural Rationale:**
+       - Presets (Mode A vs. Mode B) introduce unnecessary abstraction layers.
+       - The system has only a few essential, orthogonal toggles:
+         1. **Show FAB on Mobile:** ON by default (Dual-Action: Click = Commit, Hold = Sync).
+         2. **Show FAB on Desktop:** OFF by default.
+         3. **Hold Duration for Full Sync:** 650ms (configurable slider: 400–1200ms). (ctrl+o to collapse)
+
+▾ Thought for 7s, 171 tokens
+  Initial edit strips the explicit millisecond metric from Idea I1 to streamline the interaction description. Subsequent review of Section 8.3 requires noting specific command mappings for the plugin to ensure accurate delegation mechanics.
+
+● Edit(/storage/emulated/0/Documents/Obsidian/REPORT.md)
+  ⎿  +2 / -2 lines
+      528                                                ▼
+      529    ┌────────────────────────────────────────────────────────────────────────────────────────┐
+      530    │                   NEW-STATE: THE DEFINITIVE USER-DRIVEN ARCHITECTURE                   │
+      531 -  │  • I1: Dual-Action FAB (Short Click = 30ms Local Commit; Long Press = Full Sync).      │
+      531 +  │  • I1: Dual-Action FAB (Short Click = Local Commit; Long Press = Full Sync).           │
+      532    │  • I2: True Gold-Standard Boot Sync (Commit 1st -> Pull 2nd -> Push 3rd).              │
+      533    │  • I3: 6-Second Pre-Commit Timer Purged Entirely from Codebase.                        │
+      534    │  • I4: Transparent, Flat Settings (No rigid Mode A/B presets; clean sensible defaults).│
+      535 -  │  • I5: 30ms Local-Only Exit Commit (Guaranteed survival before Android SIGKILL).       │
+      535 +  │  • I5: Best-Effort Local Exit Commit (Secures edits on app switch; Boot Sync recovers).│
+      536    └────────────────────────────────────────────────────────────────────────────────────────┘
+      537    ```
+      538
+● Edit(/storage/emulated/0/Documents/Obsidian/REPORT.md)
+  ⎿  +2 / -2 lines
+      543    #### Idea I1: The Dual-Action FAB (Click vs. Hold)
+      544    * **The Concept:**
+      545      * **Short Click (< 650ms):** **Instant Local Commit ONLY** (`obsidian-git:commit`).
+      546 -      - Staged and written to local `.git/objects` in **~30 milliseconds**.
+      546 +      - Fast local commit staged and written directly to `.git/objects` (desktop ~30ms estimate; mobile ~1.9s single measurement, RMX3780).
+      547        - Requires **zero network connection** (100% offline safe).
+      548        - FAB turns **🔵 Blue ("Committed Locally / Safe to Exit")** with a crisp single haptic vibration (`40ms`).
+      549 -      - Gives the user total control: whenever you reach a natural pause in writing, a 0.1s tap permanently saves your thoughts to disk.
+      549 +      - Gives the user total control: whenever you reach a natural pause in writing, a quick tap permanently saves your thoughts to disk.
+      550      * **Long Press / Hold ($\ge$ 650ms):** **Full Gold-Standard Sync** (`obsidian-git:push`).
+      551        - Executes the full pipeline: **Commit Local (1st) $\to$ Pull Remote (2nd) $\to$ Push Combined (3rd)**.
+      552        - FAB shows spinning sync animation $\to$ dual haptic vibration (`50ms, 50ms, 100ms`) $\to$ **🟢 Green Checkmark ("Remote Synced")**.
+● Edit(/storage/emulated/0/Documents/Obsidian/REPORT.md)
+  ⎿  +1 / -1 lines
+      576    * **Architectural Rationale:**
+      577      - Ticking timers on mobile are battery-intensive and conceptually flawed.
+      578      - Guessing human pauses via countdowns creates artificial friction.
+      579 -    - With Idea I1, the human has a **30ms Single-Tap Local Commit on the FAB**. A quick tap replaces the timer entirely.
+      579 +    - With Idea I1, the human has a **Single-Tap Local Commit on the FAB**. A quick tap replaces the timer entirely.
+      580    * **Codebase Impact:**
+      581      - Completely deletes `preCommitTimer`, `localPreCommitSeconds` slider, and background auto-push logic from `main.js` and `src/main.ts`.
+      582      - The codebase becomes ~70 lines lighter, cleaner, and strictly deterministic.
+● Bash(sed -n '595,665p' /storage/emulated/0/Documents/Obsidian/REPORT.md)
+  ⎿  <output +66 lines>
+       3. **Purge 6-Second Pre-Commit Timer (I3):**
+          - Delete `preCommitTimer`, `localPreCommitSeconds`, and background auto-push from `main.js` and `src/main.ts`.
+       4. **Implement Transparent Settings UI (I4):**
+          - Direct settings: Show FAB on Mobile/Desktop, Hold Duration slider (400–1200ms), Boot Sync toggle, Exit Action dropdown, Haptics toggle.
+       5. **Implement Local-Only Exit Sentry (I5):**
+          - On `visibilitychange === "hidden"`: runs `obsidian-git:commit` (30ms disk write).
+     * **Manual Settings (Configured by User in Companion GUI in Next Pass):**
+       - Verify settings in GUI.
+
+     #### C. In Documentation:
+● Edit(/storage/emulated/0/Documents/Obsidian/REPORT.md)
+  ⎿  +11 / -11 lines
+      593        6. **Haptic Feedback:** ON by default.
+      594    * Giving users direct access to these clear settings with sensible defaults is simpler, cleaner, and universally adaptable.
+      595
+      596 -  #### Idea I5: The 30ms Local-Only Exit Sentry (Defeating `SIGKILL`)
+      597 -  * **The Insight:**
+      598 -    - When a user forcefully swipes away an app from Android Recent Apps, Android delivers `document.visibilityState === "hidden"`, followed within **~300ms** by a kernel `SIGKILL (signal 9)`.
+      599 -    - A network push (1.5–4.0s) CANNOT complete before `SIGKILL`.
+      600 -    - However, writing a Git commit to local flash storage (`.git/objects`) takes only **20 to 40 milliseconds**!
+      601 -    - In Android WebView, `visibilitychange` has sufficient headroom (100–300ms) for a disk write to finish before the process terminates.
+      596 +  #### Idea I5: Best-Effort Local Exit Commit
+      597 +  * **The Sudden Exit Challenge & Empirical Benchmarking:**
+      598 +    - Empirical measurements (single measurements on Realme RMX3780): an isomorphic-git commit takes **~1,884ms** on Android scoped storage, while a Recent Apps swipe-out kills the process via `SIGKILL` in **~657ms** after `visibilitychange === "hidden"`. (Desktop ~30ms
+is an estimate; desktop quit is not device-tested and does not register via `tasks`).
+      599 +    - Because a mobile commit (~1.9s) exceeds the swipe-out window (657ms), an exit commit is best-effort:
+      600 +      1. **App Switching / Backgrounding:** The exit commit completes reliably during normal app switches and device lock (observed by the owner), securing changes to local Git objects immediately.
+      601 +      2. **Swipe-Out Kills:** If the app is immediately swiped away, the commit may be cut short by `SIGKILL`. However, `flushActiveEditor()` has already saved editor text to disk (~150ms), and the Unified Boot Engine (I2) commits the leftovers on next app startup
+(observed recovery: commit `bc06072`).
+      602 +    - Mobile commits on `visibilitychange` only; redundant `pagehide` is removed.
+      603    * **The New-State Exit Architecture:**
+      603 -    - When the app is minimized, switched, or swiped away (`visibilitychange === "hidden"`):
+      604 -    - If `isDirty` is true, GitSync Companion immediately executes `obsidian-git:commit` (**local disk commit only, 30ms, zero network**).
+      605 -    - The working tree is permanently secured on local disk before the kernel kills the app!
+             … and 9 more lines
+● Edit(/storage/emulated/0/Documents/Obsidian/REPORT.md)
+  ⎿  +2 / -2 lines
+ 615    │                        GITSYNC COMPANION                               │
+ 616    │  (The User-Intentional Mobile Controller & UI Layer)                   │
+ 617    │                                                                        │
+ 618 -  │  • Dual-Action FAB: Short Click (30ms Commit) | Long Press (Full Sync) │
+ 618 +  │  • Dual-Action FAB: Short Click (Local Commit) | Long Press (Full Sync)│
+ 619    │  • Boot-Time Gold-Standard Engine: Commit (1st) -> Pull -> Push (3rd)  │
+ 620 -  │  • 30ms Local-Only Exit Sentry (Disk commit before SIGKILL)            │
+ 620 +  │  • Best-Effort Local Exit Commit (Disk commit on exit)                 │
+ 621    │  • Live 4-State Visual Indicators (Orange / Blue / Green / Spinning)   │
+ 622    └───────────────────────────────────┬────────────────────────────────────┘
+ 623                                        │ Public Obsidian Command API
+● Edit(/storage/emulated/0/Documents/Obsidian/REPORT.md)
+  ⎿  +1 / -1 lines
+ 649    #### B. In GitSync Companion (`git-sync-companion`):
+ 650    * **Codebase Changes (To be executed by Agent in Next Pass):**
+ 651      1. **Implement Dual-Action FAB (I1):**
+ 652 -       - Short click (< 650ms): `obsidian-git:commit` (local-only, 30ms, single haptic buzz).
+ 652 +       - Short click (< 650ms): `obsidian-git:commit` (local-only, single haptic buzz).
+ 653         - Long press ($\ge$ 650ms): `obsidian-git:push` (`commitAndSync`, Gold-Standard sequence, dual haptic buzz).
+ 654      2. **Implement Unified Gold-Standard Boot Engine (I2):**
+ 655         - On boot, sequentially runs: Check dirty $\to$ `commit` local edits $\to$ `pull` remote edits $\to$ `push` combined history.
+● Edit(/storage/emulated/0/Documents/Obsidian/REPORT.md)
+  ⎿  +1 / -1 lines
+ 658      4. **Implement Transparent Settings UI (I4):**
+ 659         - Direct settings: Show FAB on Mobile/Desktop, Hold Duration slider (400–1200ms), Boot Sync toggle, Exit Action dropdown, Haptics toggle.
+ 660      5. **Implement Local-Only Exit Sentry (I5):**
+ 661 -       - On `visibilitychange === "hidden"`: runs `obsidian-git:commit` (30ms disk write).
+ 661 +       - On `visibilitychange === "hidden"`: runs `obsidian-git:commit` (best-effort disk write).
+ 662    * **Manual Settings (Configured by User in Companion GUI in Next Pass):**
+ 663      - Verify settings in GUI.
+ 664
+● Bash(cd /storage/emulated/0/Documents/Obsidian
+for pat in "30ms" "~300ms" "natively" "Two-Pillar" "index.lock" "lock corruption" "purged" "pagehide"; do
+  echo "=== Pattern: $pat ==="
+  grep -n "$pat" GIT_SYNC_ARCHITECTURE_PROPOSAL.md GIT_SYNC_COMPANION_PROPOSAL.md REPORT.md TECHNICAL_CHANGE_REPORT.md || echo "None"
+done
+)                                                                                                                                     (ctrl+o to collapse)
+  ⎿  <output +28 lines>
+     None
+     === Pattern: purged ===
+     None
+     === Pattern: pagehide ===
+     GIT_SYNC_ARCHITECTURE_PROPOSAL.md:70:* Mobile commits on `visibilitychange` only; redundant `pagehide` is removed.
+     REPORT.md:119:  1. **Lifecycle Engine:** Automatically triggers Git sync on app exit, app switch, or lock screen via `visibilitychange` & `pagehide`.
+     REPORT.md:374:│  • Mobile Lifecycle Sentry (visibilitychange / pagehide exit sync)     │
+     REPORT.md:602:  - Mobile commits on `visibilitychange` only; redundant `pagehide` is removed.
+     TECHNICAL_CHANGE_REPORT.md:90:   * Based on empirical measurements showing `isomorphic-git:commit` takes **~1,884ms** while Recent Apps swipe-out kills the process via `SIGKILL` in **~657ms** (single measurements on Realme RMX3780), commit `5442bd1` removed mobile
+     `visibilitychange` and `pagehide` exit handlers, attempting to adopt a strict "Two-Pillar" (FAB + Boot Sync) model.
+     TECHNICAL_CHANGE_REPORT.md:94:   * The redundant `pagehide` handler was cleanly removed (mobile commits on `visibilitychange` only). Desktop `workspace.on("quit")` remains active (not device-tested; does not register via `tasks`). (ctrl+o to collapse)
+
+▾ Thought for 18s, 1.5k tokens
+  Grep results isolate multiple references to a thirty-millisecond duration across architectural documents. Each instance explicitly designates the desktop figure as an unverified estimate rather than empirical data from device testing.
+
+  Targeted text searches across documentation confirm specific historical contexts for architectural terms like the thirty-millisecond desktop figure and mobile visibility triggers. Cross-referencing findings against change logs validates that mobile commit behavior relies
+  exclusively on visibility changes after purging redundant event handlers.
+
+  Command ID references align with the source implementation, though data structure settings require validation against default configuration parameters. Boot sync timing relies on a two-second initialization delay preceding remote status checks.
+
+● Bash(echo "=== 1. node --check vault main.js ==="
+node --check /storage/emulated/0/Documents/Obsidian/.obsidian/plugins/git-sync-companion/main.js
+echo "=== 2. cmp vault vs repo main.js ==="
+cmp /storage/emulated/0/Documents/Obsidian/.obsidian/plugins/git-sync-companion/main.js ~/projects/git-sync-companion/main.js && echo "BYTE-IDENTICAL"
+echo "=== 3. node tsc --noEmit in repo ==="
+cd ~/projects/git-sync-companion && node ./node_modules/typescript/bin/tsc --noEmit
+)                                                                                                                                                      (ctrl+o to collapse)
+  ⎿  Command exited with code 0.
+
+     Command output:
+     === 1. node --check vault main.js ===
+     === 2. cmp vault vs repo main.js ===
+     BYTE-IDENTICAL
+     === 3. node tsc --noEmit in repo === (ctrl+o to collapse)
+
+  Waiting for verification task to complete.
+
+● ManageTask(status task-1735) (ctrl+o to collapse)
+
+  Waiting for tsc to finish.
+
+● ManageTask(status task-1735) (ctrl+o to collapse)
+
+  Waiting for task completion notification.
+
+● ManageTask(status task-1735)
+● Bash(VAULT="/storage/emulated/0/Documents/Obsidian/.obsidian/plugins/git-sync-companion/main.js"
+REPO="/data/data/com.termux/files/home/projects/git-sync-companion/main.js"
+SRC="/data/data/com.termux/files/home/projects/git-sync-companion/src/main.ts"
+
+for pattern in "visibilitychange" "pagehide" "promiseQueue" "hasEditsDuringSync" "quit"; do
+  echo "--- pattern: $pattern ---"
+  echo -n "vault main.js: "
+  grep -c "$pattern" "$VAULT" || true
+  echo -n "repo main.js:  "
+  grep -c "$pattern" "$REPO" || true
+  echo -n "src/main.ts:   "
+  grep -c "$pattern" "$SRC" || true
+done
+)                                                                                            (ctrl+o to collapse)
+  ⎿  <output +15 lines>
+     repo main.js:  5
+     src/main.ts:   5
+     --- pattern: hasEditsDuringSync ---
+     vault main.js: 4
+     repo main.js:  4
+     src/main.ts:   4
+     --- pattern: quit ---
+     vault main.js: 4
+     repo main.js:  4
+     src/main.ts:   4 (ctrl+o to collapse)
+
+▾ Thought for 17s, 2.1k tokens
+  Code parity verified across build artifacts, showing complete synchronization in event hooks and queue metrics. Proceeding to evaluate requirements for the next implementation phase.
+
+  Initial check suggests gathering system state metrics and tool paths directly from environment parameters. Verification outputs and git logs need structured formatting before appending to the documentation target.
+
+  Git history confirms recent automated vault backups and a clean working tree. Grep metrics reveal identical search frequencies for lifecycle hooks across repositories, though documentation files require final auditing to purge residual incorrect timeout claims.
+
+  Verification suites confirm byte-identical compilation output alongside clean type-check runs. Documentation drift audit completed, replacing outdated assumptions regarding exit latency metrics with validated empirical mobile benchmarks.
+
+● Bash(cd /storage/emulated/0/Documents/Obsidian
+for doc in GIT_SYNC_ARCHITECTURE_PROPOSAL.md GIT_SYNC_COMPANION_PROPOSAL.md REPORT.md TECHNICAL_CHANGE_REPORT.md; do
+  echo "=== $doc ==="
+  git --no-optional-locks log --oneline -3 -- "$doc"
+done
+)                                                                                                                    (ctrl+o to collapse)
+  ⎿  <output +11 lines>
+     b98e5ab vault backup: 2026-11-25 13:47:33
+     5442bd1 vault backup: 2026-11-24 12:49:21
+     === REPORT.md ===
+     b98e5ab vault backup: 2026-11-25 13:47:33
+     5442bd1 vault backup: 2026-11-24 12:49:21
+     87a576c vault backup: 2026-11-19 13:49:31
+     === TECHNICAL_CHANGE_REPORT.md ===
+     b98e5ab vault backup: 2026-11-25 13:47:33
+     5442bd1 vault backup: 2026-11-24 12:49:21
+     5eaf3e4 vault backup: 2026-11-24 11:28:18 (ctrl+o to collapse)
+
+▾ Thought for 21s, 460 tokens
+  Commit history reveals a regression loop where a rewrite removed mobile exit handlers, followed by a partial revert that left stale timeout text and missing benchmarks. Documentation cleanup needs to align all architectural references and settings text with the final state
+  established in the recent passes.
+
+● Edit(/storage/emulated/0/Documents/Obsidian/REPORT.md)
+  ⎿  Wrote 87 lines
+● Bash(git -C /storage/emulated/0/Documents/Obsidian --no-optional-locks status -s) (ctrl+o to collapse)
+  ⎿  Created At: 2026-11-28T06:50:06Z
+     Completed At: 2026-11-28T06:50:07Z
+     Command exited with code 0.
+
+     Command output:
+      M GIT_SYNC_ARCHITECTURE_PROPOSAL.md
+      M GIT_SYNC_COMPANION_PROPOSAL.md
+      M REPORT.md
+      M TECHNICAL_CHANGE_REPORT.md (ctrl+o to collapse)
+
+▾ Thought for 7s, 241 tokens
+  `main.js` remains unmodified relative to the target reference, and documentation edits apply correctly. Executing final syntax validation and parity checks across targets to confirm distribution integrity.
+
+● Bash(echo "=== VERIFY 1: node --check ==="
+node --check /storage/emulated/0/Documents/Obsidian/.obsidian/plugins/git-sync-companion/main.js
+
+echo "=== VERIFY 2: cmp vault vs repo main.js ==="
+cmp /storage/emulated/0/Documents/Obsidian/.obsidian/plugins/git-sync-companion/main.js ~/projects/git-sync-companion/main.js && echo "BYTE-IDENTICAL"
+
+echo "=== VERIFY 3: grep pattern counts in source files ==="
+VAULT="/storage/emulated/0/Documents/Obsidian/.obsidian/plugins/git-sync-companion/main.js"
+REPO="/data/data/com.termux/files/home/projects/git-sync-companion/main.js"
+SRC="/data/data/com.termux/files/home/projects/git-sync-companion/src/main.ts"
+
+for pattern in "visibilitychange" "pagehide" "promiseQueue" "hasEditsDuringSync" "quit"; do
+  echo "--- pattern: $pattern ---"
+  echo -n "vault main.js: "
+  grep -c "$pattern" "$VAULT" || true
+  echo -n "repo main.js:  "
+  grep -c "$pattern" "$REPO" || true
+  echo -n "src/main.ts:   "
+  grep -c "$pattern" "$SRC" || true
+done
+
+echo "=== VERIFY 4: grep 4 docs ==="
+cd /storage/emulated/0/Documents/Obsidian
+for pat in "30ms" "~300ms" "natively" "Two-Pillar" "index.lock" "lock corruption" "purged" "pagehide"; do
+  echo "--- pattern: $pat ---"
+  grep -n "$pat" GIT_SYNC_ARCHITECTURE_PROPOSAL.md GIT_SYNC_COMPANION_PROPOSAL.md REPORT.md TECHNICAL_CHANGE_REPORT.md || echo "None"
+done
+)
+  ⎿  <output +66 lines>
+     REPORT.md:374:│  • Mobile Lifecycle Sentry (visibilitychange / pagehide exit sync)     │
+     REPORT.md:602:  - Mobile commits on `visibilitychange` only; redundant `pagehide` is removed.
+     REPORT.md:709:  - `pagehide`: vault main.js: 0, repo main.js: 0, src/main.ts: 0
+     REPORT.md:719:* `TECHNICAL_CHANGE_REPORT.md`: updated Sections 1, 2, and 4 to remove obsolete 30ms claims and pagehide reference; added Section 5 documenting the removal attempt and revert to best-effort model.
+     REPORT.md:728:  - `pagehide`: vault main.js: 0, repo main.js: 0, src/main.ts: 0
+     REPORT.md:740:| `TECHNICAL_CHANGE_REPORT.md` | §1, §2, §4 | "30ms local exit sentry that defeats Android SIGKILL" & `pagehide` | Updated to best-effort local exit commit; removed `pagehide`; added Section 5 documenting revert. | Fixed |
+     REPORT.md:746:  - `94dff44`: updated settings text and cleaned pagehide.
+     REPORT.md:750:  - `94dff44`: updated settings text and cleaned pagehide.
+     TECHNICAL_CHANGE_REPORT.md:90:   * Based on empirical measurements showing `isomorphic-git:commit` takes **~1,884ms** while Recent Apps swipe-out kills the process via `SIGKILL` in **~657ms** (single measurements on Realme RMX3780), commit `5442bd1` removed mobile
+     `visibilitychange` and `pagehide` exit handlers, attempting to adopt a strict "Two-Pillar" (FAB + Boot Sync) model.
+     TECHNICAL_CHANGE_REPORT.md:94:   * The redundant `pagehide` handler was cleanly removed (mobile commits on `visibilitychange` only). Desktop `workspace.on("quit")` remains active (not device-tested; does not register via `tasks`).
+● Edit(~/backups/PROGRESS-revert.md) (ctrl+o to collapse)
+  ⎿  Wrote 1 line (ctrl+o to collapse)
+
+▾ Thought for 6s, 272 tokens
+  Revert and documentation audit verified clean across code and specs. Initial assumption that additional verification passes were necessary proves incorrect, as the documented outputs fully capture the state. Formatting constraints require limiting the final response length to six
+  lines or fewer pointing directly to the audit section.
+
+  The revert and documentation audit have been completed and verified clean across code and specs.
+  All details, raw verification outputs, docs drift analysis, commit history notes, and suspected bugs are documented in /storage/emulated/0/Documents/Obsidian/REPORT.md under ## Session report 2026-11-25: revert + docs audit.
+  main.js and TypeScript files (projects/git-sync-companion/src/main.ts, projects/git-sync-companion/src/settings.ts) are synchronized with zero syntax or type errors.
+  Vault and repository /storage/emulated/0/Documents/Obsidian/.obsidian/plugins/git-sync-companion/main.js remain byte-identical, and all four documents reflect the empirical best-effort exit model.
+
